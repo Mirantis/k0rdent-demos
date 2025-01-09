@@ -99,6 +99,7 @@ This assumes that you already have configured the required [AWS IAM Roles](https
     ```shell
     export AWS_ACCESS_KEY_ID="AWS Access Key ID"
     export AWS_SECRET_ACCESS_KEY="AWS Secret Access Key"
+    export AWS_SESSION_TOKEN="AWS Session Token"
     ````
 2. By default, it will provision all resources in the `us-west-2` AWS region. If you want to change this, export `AWS_REGION` environment variable:
     ```shell

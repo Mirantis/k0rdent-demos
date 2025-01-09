@@ -212,9 +212,11 @@ get-creds-%:
 .%-aws-access-key: var_description = AWS access key ID
 .%-aws-secret-access-key: var_name = AWS_SECRET_ACCESS_KEY
 .%-aws-secret-access-key: var_description = AWS secret access key
+.%-aws-session-token: var_name = AWS_SESSION_TOKEN
+.%-aws-session-token: var_description = AWS session token
 
 .PHONY: setup-aws-creds
-setup-aws-creds: .check-variable-aws-access-key .check-variable-aws-secret-access-key ## Setup AWS credentials
+setup-aws-creds: .check-variable-aws-access-key .check-variable-aws-secret-access-key .check-variable-aws-session-token ## Setup AWS credentials
 setup-aws-creds: ## Setup AWS credentials
 	envsubst < setup/aws-credentials.yaml | kubectl apply -f -
 
