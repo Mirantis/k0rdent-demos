@@ -243,6 +243,11 @@ get-creds-azure: ## Get Azure credentials info
 
 ## Common targets and functions
 UNIQUE_SUFFIX = $(patsubst %,-%,$(USERNAME))
+FULL_CLUSTER_NAME = $(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME)$(UNIQUE_SUFFIX)
+
+TEMP_DIR = $(LOCALBIN)/temp
+$(TEMP_DIR): $(LOCALBIN)
+	@mkdir -p $(TEMP_DIR)
 
 apply-%: NAMESPACE = $(TESTING_NAMESPACE)
 apply-%: SHOW_DIFF = true
@@ -256,7 +261,7 @@ apply-%: .check-binary-kubectl
 watch-%: NAMESPACE = $(TESTING_NAMESPACE)
 watch-%: .check-binary-kubectl
 watch-%:
-	@$(KUBECTL) get -n $(NAMESPACE) clusterdeployment $(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME)$(UNIQUE_SUFFIX) --watch
+	@$(KUBECTL) get -n $(NAMESPACE) clusterdeployment $(FULL_CLUSTER_NAME) --watch
 
 KUBECONFIGS_DIR = $(shell pwd)/kubeconfigs
 $(KUBECONFIGS_DIR):
@@ -264,19 +269,21 @@ $(KUBECONFIGS_DIR):
 
 get-kubeconfig-%: NAMESPACE = $(TESTING_NAMESPACE)
 get-kubeconfig-%: .check-binary-kubectl
-	@$(KUBECTL) -n $(NAMESPACE) get secret $(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME)$(UNIQUE_SUFFIX)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-aws-$(CLUSTERNAME).kubeconfig
+	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-aws-$(CLUSTERNAME).kubeconfig
 
+# COMMAND is the yq expression that will be applied to the existing AccessManagement object
+# If the command that implements this template has any credential_name, cluster_template_chain_name or service_template_chain_name variables, it will be added to the AccessManagement object:
 approve-%: COMMAND = .spec.accessRules[0].targetNamespaces.list |= ((. // []) + "$(TARGET_NAMESPACE)" | unique)$(patsubst %, | .spec.accessRules[0].credentials |= ((. // []) + "%" | unique),$(credential_name))$(patsubst %, | .spec.accessRules[0].clusterTemplateChains |= ((. // []) + "%" | unique),$(cluster_template_chain_name))$(patsubst %, | .spec.accessRules[0].serviceTemplateChains |= ((. // []) + "%" | unique),$(service_template_chain_name))
-approve-%: .check-binary-yq
+approve-%: .check-binary-yq $(TEMP_DIR)
 	@$(KUBECTL) -n $(TESTING_NAMESPACE) get AccessManagement $(KCM_ACCESS_MANAGEMENT_OBJECT_NAME) -o yaml | \
-		$(YQ) '$(COMMAND)' | \
-		$(KUBECTL) apply -f -
+		$(YQ) '$(COMMAND)' > $(TEMP_DIR)/$(KCM_ACCESS_MANAGEMENT_OBJECT_NAME)-access-management.yaml
+	@template_path=$(TEMP_DIR)/$(KCM_ACCESS_MANAGEMENT_OBJECT_NAME)-access-management.yaml make apply-accessmanagement
 
 get-yaml-%: NAMESPACE = $(TESTING_NAMESPACE)
 get-yaml-%: .check-binary-kubectl
 	@$(KUBECTL) -n $(NAMESPACE) get $(TYPE) $(OBJECT_NAME) -o yaml
 
-get-avaliable-upgrades-%: .check-binary-kubectl
+get-available-upgrades-%: .check-binary-kubectl
 	@$(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com -o go-template='{{ range $$_,$$cluster := .items }}Cluster {{ $$cluster.metadata.name}} available upgrades: {{"\n"}}{{ range $$_,$$upgrade := $$cluster.status.availableUpgrades}}{{"  - "}}{{ $$upgrade }}{{"\n"}}{{ end }}{{"\n"}}{{ end }}'
 
 
@@ -342,8 +349,8 @@ apply-clustertemplate-demo-azure-standalone-cp-0.0.2: SHOW_DIFF = false
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: template_path = templates/cluster/demo-azure-standalone-cp-0.0.2.yaml
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: ## Deploy custom demo-azure-standalone-cp-0.0.2 ClusterTemplate
 
-get-avaliable-upgrades-k0rdent: NAMESPACE = $(TESTING_NAMESPACE)
-get-avaliable-upgrades-k0rdent: ## Get available upgrades for all cluster deployments
+get-available-upgrades-k0rdent: NAMESPACE = $(TESTING_NAMESPACE)
+get-available-upgrades-k0rdent: ## Get available upgrades for all cluster deployments
 
 apply-cluster-deployment-aws-test1-0.0.2: CLUSTERNAME = test1
 apply-cluster-deployment-aws-test1-0.0.2: template_path = clusterDeployments/aws/0.0.2.yaml
@@ -360,24 +367,22 @@ apply-servicetemplate-demo-ingress-nginx-4.11.0: SHOW_DIFF = false
 apply-servicetemplate-demo-ingress-nginx-4.11.0: template_path = templates/service/demo-ingress-nginx-4.11.0.yaml
 apply-servicetemplate-demo-ingress-nginx-4.11.0: ## Deploy custom demo-ingress-nginx-4.11.0 ServiceTemplate
 
-apply-cluster-deployment-aws-test1-0.0.1-ingress: CLUSTERNAME = test1
-apply-cluster-deployment-aws-test1-0.0.1-ingress: template_path = clusterDeployments/aws/0.0.1-ingress.yaml
-apply-cluster-deployment-aws-test1-0.0.1-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
+apply-cluster-deployment-aws-test1-ingress: CLUSTERNAME = test1
+apply-cluster-deployment-aws-test1-ingress: PROVIDER = aws
+apply-cluster-deployment-aws-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-test1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-aws-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
 
-apply-cluster-deployment-aws-test2-0.0.1-ingress: CLUSTERNAME = test2
-apply-cluster-deployment-aws-test2-0.0.1-ingress: template_path = clusterDeployments/aws/0.0.1-ingress.yaml
-apply-cluster-deployment-aws-test2-0.0.1-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
-
-apply-cluster-deployment-aws-test1-0.0.2-ingress: CLUSTERNAME = test1
-apply-cluster-deployment-aws-test1-0.0.2-ingress: template_path = clusterDeployments/aws/0.0.2-ingress.yaml
-apply-cluster-deployment-aws-test1-0.0.2-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
-
-apply-cluster-deployment-aws-test2-0.0.2-ingress: CLUSTERNAME = test2
-apply-cluster-deployment-aws-test2-0.0.2-ingress: template_path = clusterDeployments/aws/0.0.2-ingress.yaml
-apply-cluster-deployment-aws-test2-0.0.2-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
+apply-cluster-deployment-aws-test2-ingress: CLUSTERNAME = test2
+apply-cluster-deployment-aws-test2-ingress: PROVIDER = aws
+apply-cluster-deployment-aws-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-test2-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-aws-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
 
 get-yaml-clusterdeployment-aws-test2: TYPE = clusterdeployment.hmc.mirantis.com
-get-yaml-clusterdeployment-aws-test2: OBJECT_NAME = $(TESTING_NAMESPACE)-aws-test2$(UNIQUE_SUFFIX)
+get-yaml-clusterdeployment-aws-test2: CLUSTERNAME = test2
+get-yaml-clusterdeployment-aws-test2: PROVIDER = aws
+get-yaml-clusterdeployment-aws-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-test2: ## Get test2 ClusterDeployment object in yaml format
 
 ##@ Demo 4
@@ -395,6 +400,30 @@ get-yaml-milticlasterservice-global-kyverno: ## Get global-kyverno MultiClusterS
 
 ##@ Demo 5
 
+CERTS_DIR = $(shell pwd)/certs
+CERTS_CA_DIR = $(CERTS_DIR)/ca
+$(CERTS_CA_DIR):
+	@mkdir -p $(CERTS_CA_DIR)
+
+$(CERTS_CA_DIR)/ca.crt: $(CERTS_CA_DIR)
+	@docker cp $(KIND_CLUSTER_NAME)-control-plane:/etc/kubernetes/pki/ca.crt $@
+
+$(CERTS_CA_DIR)/ca.key: $(CERTS_CA_DIR)
+	@docker cp $(KIND_CLUSTER_NAME)-control-plane:/etc/kubernetes/pki/ca.key $@
+
+PLATFORM_ENGINEER_CERTS_DIR = $(CERTS_DIR)/platform-engineer1
+$(PLATFORM_ENGINEER_CERTS_DIR):
+	@mkdir -p $(PLATFORM_ENGINEER_CERTS_DIR)
+
+$(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.key: $(PLATFORM_ENGINEER_CERTS_DIR)
+	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) genrsa -out /certs/platform-engineer1/platform-engineer1.key 2048
+
+$(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr: $(PLATFORM_ENGINEER_CERTS_DIR) $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.key
+	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) req -new -key /certs/platform-engineer1/platform-engineer1.key -out /certs/platform-engineer1/platform-engineer1.csr -subj '/CN=platform-engineer1/O=$(TARGET_NAMESPACE)'
+
+$(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.crt: $(PLATFORM_ENGINEER_CERTS_DIR) $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr $(CERTS_CA_DIR)/ca.crt $(CERTS_CA_DIR)/ca.key
+	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360
+
 .PHONY: create-target-namespace-rolebindings
 create-target-namespace-rolebindings: .check-binary-kubectl
 create-target-namespace-rolebindings: ## Create RBAC configuration for users that should have the access only to the blue namespace
@@ -405,19 +434,16 @@ create-target-namespace-rolebindings: ## Create RBAC configuration for users tha
 generate-platform-engineer1-kubeconfig: USER_NAME = platform-engineer1
 generate-platform-engineer1-kubeconfig: clean-certs
 generate-platform-engineer1-kubeconfig: ## Create Platform Engineer user that has access only to the blue namespace
-	@make certs/$(USER_NAME)/$(USER_NAME).crt
-	@USER_CRT=$$(cat certs/$(USER_NAME)/$(USER_NAME).crt | base64 | tr -d '\n\r') \
-		USER_KEY=$$(cat certs/$(USER_NAME)/$(USER_NAME).key | base64 | tr -d '\n\r')  \
-		CA_CRT=$$(cat certs/ca/ca.crt | base64 | tr -d '\n\r') \
+	@make $(CERTS_DIR)/$(USER_NAME)/$(USER_NAME).crt
+	@USER_CRT=$$(cat $(CERTS_DIR)/$(USER_NAME)/$(USER_NAME).crt | base64 | tr -d '\n\r') \
+		USER_KEY=$$(cat $(CERTS_DIR)/$(USER_NAME)/$(USER_NAME).key | base64 | tr -d '\n\r')  \
+		CA_CRT=$$(cat $(CERTS_CA_DIR)/ca.crt | base64 | tr -d '\n\r') \
 		CLUSTER_HOST_PORT=$$(docker port $(KIND_CLUSTER_NAME)-control-plane 6443) \
 		envsubst < certs/kubeconfig-template.yaml > certs/$(USER_NAME)/kubeconfig.yaml
 	@echo "Config exported to certs/$(USER_NAME)/kubeconfig.yaml"
 
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: cluster_template_chain_name = demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.1 into the target namespace
-
-approve-clustertemplatechain-aws-standalone-cp-0.0.2: cluster_template_chain_name = demo-aws-standalone-cp-0.0.2 demo-aws-standalone-cp-0.0.1
-approve-clustertemplatechain-aws-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.2 into the target namespace
 
 approve-credential-aws: credential_name = aws-cluster-identity-cred
 approve-credential-aws: ## Approve AWS Credentials into the target namespace
@@ -446,6 +472,22 @@ get-kubeconfig-aws-dev1: PROVIDER = aws
 get-kubeconfig-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 get-kubeconfig-aws-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace
 
+##@ Demo 7
+
+approve-clustertemplatechain-aws-standalone-cp-0.0.2: cluster_template_chain_name = demo-aws-standalone-cp-0.0.2 demo-aws-standalone-cp-0.0.1
+approve-clustertemplatechain-aws-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.2 into the target namespace
+
+##@ Demo 8
+
+get-available-upgrades-blue: NAMESPACE = $(TARGET_NAMESPACE)
+get-available-upgrades-blue: ## Get available upgrades for all cluster deployments in the blue namespace
+
+apply-cluster-deployment-aws-dev1-0.0.2: CLUSTERNAME = dev1
+apply-cluster-deployment-aws-dev1-0.0.2: template_path = clusterDeployments/aws/0.0.2.yaml
+apply-cluster-deployment-aws-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-aws-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-aws-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2
+
 ##@ Demo 9
 
 approve-servicetemplatechain-ingress-nginx-4.11.0: service_template_chain_name = demo-ingress-nginx-4.11.0
@@ -453,235 +495,22 @@ approve-servicetemplatechain-ingress-nginx-4.11.0: ## Approve ServiceTemplate in
 
 ##@ Demo 10
 
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: CLUSTERNAME = dev1
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: template_path = clusterDeployments/aws/0.0.1-ingress.yaml
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: PROVIDER = aws
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
-apply-cluster-deployment-aws-dev1-0.0.1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace
+apply-cluster-deployment-aws-dev1-ingress: CLUSTERNAME = dev1
+apply-cluster-deployment-aws-dev1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-aws-dev1-ingress: PROVIDER = aws
+apply-cluster-deployment-aws-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-dev1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-aws-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-aws-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace
 
 get-yaml-clusterdeployment-aws-dev1: TYPE = clusterdeployment.hmc.mirantis.com
+get-yaml-clusterdeployment-aws-dev1: CLUSTERNAME = dev1
+get-yaml-clusterdeployment-aws-dev1: PROVIDER = aws
 get-yaml-clusterdeployment-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
-get-yaml-clusterdeployment-aws-dev1: OBJECT_NAME = $(TARGET_NAMESPACE)-aws-dev1$(UNIQUE_SUFFIX)
+get-yaml-clusterdeployment-aws-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 get-yaml-clusterdeployment-aws-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format
 
-##@ TBD
-
-# install-template will install a given template
-# $1 - yaml file
-define install-template
-	$(KUBECTL) apply -f $(1)
-endef
-
-.PHONY: install-servicetemplate-demo-ingress-nginx-4.11.3
-install-servicetemplate-demo-ingress-nginx-4.11.3:
-	$(call install-template,templates/service/demo-ingress-nginx-4.11.3.yaml)
-
-# apply-managed-cluster-yaml will apply a given cluster yaml
-# $1 - target namespace
-# $2 - clustername
-# $3 - yaml file
-define apply-managed-cluster-yaml
-	@echo "applying: "
-	@NAMESPACE=$(1) CLUSTERNAME=$(2) envsubst < $(3)  | KUBECTL_EXTERNAL_DIFF="diff --color -N -u" $(KUBECTL) diff  -f - || true
-	@echo
-	NAMESPACE=$(1) CLUSTERNAME=$(2) envsubst < $(3) | $(KUBECTL) apply -f -
-endef
-
-# apply-managed-cluster-yaml-platform-engineer1 will apply a given cluster yaml as platform-engineer1
-# $1 - target namespace
-# $2 - clustername
-# $3 - yaml file
-define apply-managed-cluster-yaml-platform-engineer1
-	@echo "applying: "
-	@NAMESPACE=$(1) CLUSTERNAME=$(2) envsubst < $(3)  | KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" KUBECTL_EXTERNAL_DIFF="diff --color -N -u" $(KUBECTL) diff  -f - || true
-	@echo
-	NAMESPACE=$(1) CLUSTERNAME=$(2) envsubst < $(3) | KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" $(KUBECTL) apply -f -
-endef
-
-
-.PHONY: apply-aws-test1-0.0.1-ingress
-apply-aws-test1-0.0.1-ingress:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test1,managedClusters/aws/0.0.1-ingress.yaml)
-
-
-
-.PHONY: apply-aws-test1-0.0.2-ingress
-apply-aws-test1-0.0.2-ingress:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test1,managedClusters/aws/0.0.2-ingress.yaml)
-
-.PHONY: apply-aws-test2-0.0.2
-apply-aws-test2-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test2,managedClusters/aws/0.0.2.yaml)
-
-.PHONY: apply-aws-test2-0.0.2-ingress
-apply-aws-test2-0.0.2-ingress:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test2,managedClusters/aws/0.0.2-ingress.yaml)
-
-.PHONY: apply-aws-prod1-0.0.1
-apply-aws-prod1-0.0.1:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),prod1,managedClusters/aws/0.0.1.yaml)
-
-.PHONY: apply-aws-prod1-ingress-0.0.1
-apply-aws-prod1-ingress-0.0.1:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),prod1,managedClusters/aws/0.0.1-ingress.yaml)
-
-.PHONY: apply-aws-prod1-0.0.2
-apply-aws-prod1-0.0.2:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),prod1,managedClusters/aws/0.0.2.yaml)
-
-.PHONY: apply-aws-prod1-ingress-0.0.2
-apply-aws-prod1-ingress-0.0.2:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),prod1,managedClusters/aws/0.0.2-ingress.yaml)
-
-
-
-
-
-
-.PHONY: apply-aws-dev1-ingress-0.0.1
-apply-aws-dev1-ingress-0.0.1:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),dev1,managedClusters/aws/0.0.1-ingress.yaml)
-
-
-.PHONY: apply-aws-dev1-0.0.2
-apply-aws-dev1-0.0.2:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),dev1,managedClusters/aws/0.0.2.yaml)
-
-.PHONY: apply-aws-dev1-ingress-0.0.2
-apply-aws-dev1-ingress-0.0.2:
-	$(call apply-managed-cluster-yaml-platform-engineer1,$(TARGET_NAMESPACE),dev1,managedClusters/aws/0.0.2-ingress.yaml)
-
-
-.PHONY: apply-azure-test1-0.0.1
-apply-azure-test1-0.0.1:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test1,azure/1-0.0.1.yaml)
-
-.PHONY: apply-azure-test1-0.0.2
-apply-azure-test1-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test1,azure/2-0.0.2.yaml)
-
-.PHONY: apply-azure-test1-ingress-0.0.2
-apply-azure-test1-ingress-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TESTING_NAMESPACE),test1,azure/3-ingress-0.0.2.yaml)
-
-
-.PHONY: apply-azure-prod1-0.0.1
-apply-azure-prod1-0.0.1:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),prod1,azure/1-0.0.1.yaml)
-
-.PHONY: apply-azure-prod1-0.0.2
-apply-azure-prod1-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),prod1,azure/2-0.0.2.yaml)
-
-.PHONY: apply-azure-prod1-ingress-0.0.2
-apply-azure-prod1-ingress-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),prod1,azure/3-ingress-0.0.2.yaml)
-
-
-.PHONY: apply-azure-dev1-0.0.1
-apply-azure-dev1-0.0.1:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),dev1,azure/1-0.0.1.yaml)
-
-.PHONY: apply-azure-dev1-0.0.2
-apply-azure-dev1-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),dev1,azure/2-0.0.2.yaml)
-
-.PHONY: apply-azure-dev1-ingress-0.0.2
-apply-azure-dev1-ingress-0.0.2:
-	$(call apply-managed-cluster-yaml,$(TARGET_NAMESPACE),dev1,azure/3-ingress-0.0.2.yaml)
-
-
-
-# approve-clustertemplatechain will approve a clustertemplate in a namespace
-# $1 - target namespace
-# $2 - templatename
-define approve-clustertemplatechain
-	$(KUBECTL) -n $(TESTING_NAMESPACE) patch AccessManagement hmc --type='json' -p='[ \
-		{ "op": "add", "path": "/spec/accessRules", "value": [] }, \
-		{ \
-			"op": "add", \
-			"path": "/spec/accessRules/-", \
-			"value": { \
-				"clusterTemplateChains": ["$(2)"], \
-				"targetNamespaces": { \
-					"list": ["$(1)"] \
-				} \
-			} \
-		} \
-	]'
-endef
-
-# approve-servicetemplatechain will approve a servicetemplatechain in a namespace
-# $1 - target namespace
-# $2 - templatename
-define approve-servicetemplatechain
-	$(KUBECTL) -n $(TESTING_NAMESPACE) patch AccessManagement hmc --type='json' -p='[ \
-		{ "op": "add", "path": "/spec/accessRules", "value": [] }, \
-		{ \
-			"op": "add", \
-			"path": "/spec/accessRules/-", \
-			"value": { \
-				"serviceTemplateChains": ["$(2)"], \
-				"targetNamespaces": { \
-					"list": ["$(1)"] \
-				} \
-			} \
-		} \
-	]'
-endef
-
-.PHONY: approve-templatechain-demo-ingress-nginx-4.11.0
-approve-templatechain-demo-ingress-nginx-4.11.0:
-	$(call approve-servicetemplatechain,$(TARGET_NAMESPACE),demo-ingress-nginx-4.11.0)
-
-.PHONY: approve-templatechain-demo-ingress-nginx-4.11.3
-approve-templatechain-demo-ingress-nginx-4.11.3:
-	$(call approve-servicetemplatechain,$(TARGET_NAMESPACE),demo-ingress-nginx-4.11.3)
-
-# approve-credential will approve a credential in a namespace
-# $1 - target namespace
-# $2 - credentialname
-define approve-credential
-	$(KUBECTL) -n $(TESTING_NAMESPACE) patch AccessManagement hmc --type='json' -p='[ \
-		{ "op": "add", "path": "/spec/accessRules", "value": [] }, \
-		{ \
-			"op": "add", \
-			"path": "/spec/accessRules/-", \
-			"value": { \
-				"credentials": ["$(2)"], \
-				"targetNamespaces": { \
-					"list": ["$(1)"] \
-				} \
-			} \
-		} \
-	]'
-endef
-
-.PHONY: approve-credential-azure
-approve-credential-azure:
-	$(call approve-credential,$(TARGET_NAMESPACE),azure-cluster-identity-cred)
-
-
-
-certs/ca/ca.crt:
-	mkdir -p certs/ca
-	docker cp $(KIND_CLUSTER_NAME)-control-plane:/etc/kubernetes/pki/ca.crt certs/ca/ca.crt
-
-certs/ca/ca.key:
-	mkdir -p certs/ca
-	docker cp $(KIND_CLUSTER_NAME)-control-plane:/etc/kubernetes/pki/ca.key certs/ca/ca.key
-
-certs/platform-engineer1/platform-engineer1.key:
-	mkdir -p certs/platform-engineer1
-	docker run -v ./certs:/certs $(OPENSSL_DOCKER_IMAGE) genrsa -out /certs/platform-engineer1/platform-engineer1.key 2048
-
-certs/platform-engineer1/platform-engineer1.csr: certs/platform-engineer1/platform-engineer1.key
-	docker run -v ./certs:/certs $(OPENSSL_DOCKER_IMAGE) req -new -key /certs/platform-engineer1/platform-engineer1.key -out /certs/platform-engineer1/platform-engineer1.csr -subj '/CN=platform-engineer1/O=$(TARGET_NAMESPACE)'
-
-certs/platform-engineer1/platform-engineer1.crt: certs/platform-engineer1/platform-engineer1.csr certs/ca/ca.crt certs/ca/ca.key
-	docker run -v ./certs:/certs $(OPENSSL_DOCKER_IMAGE) x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360
 
 ##@ Cleanup
 
@@ -710,6 +539,7 @@ clean-configs:
 	@rm -rf $(KIND_CLUSTER_CONFIG_PATH)
 	@rm -rf $(LOCALBIN)/charts
 	@rm -rf $(KUBECONFIGS_DIR)/*.kubeconfig
+	@rm -rf $(TEMP_DIR)
 
 .PHONY: clean-certs
 clean-certs:

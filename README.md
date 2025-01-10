@@ -324,7 +324,7 @@ This demo will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of th
 2. The fact that we have an upgrade available will be reported by k0rdent. You can find all available upgrades for all cluster deployments by executing this command:
 
     ```shell
-    make get-avaliable-upgrades-k0rdent
+    make get-available-upgrades-k0rdent
     ```
 
     Example output (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
@@ -387,7 +387,7 @@ In order to run this demo you need [`Demo 1`](#demo-1-standalone-cluster-deploym
 
 2. Apply ServiceTemplate to cluster:
     ```shell
-    make apply-cluster-deployment-aws-test2-0.0.1-ingress
+    make apply-cluster-deployment-aws-test2-ingress
     ```
     This applies the [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) yaml template. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `serviceTemplate` key
 
@@ -636,7 +636,146 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 ## Demo 7: Test new ClusterTemplate as k0rdent Admin, then approve them in separate Namespace
 
+> Expected completion time ~5-15 min, depending on what previous demos were completed
+
+As demonstrated in [Demo 5](#demo-5-approve-clustertemplate--infracredentials-for-separate-namespace) and [Demo 6](#demo-6-use-approved-clustertemplate-in-separate-namespace), one of the important features of k0rdent project is the possibility to manage ClusterTemplate and ServiceTemplate development process, testing and access. Users responsible for developing and testing infrastructure (we call them k0rdent Admin in these demos) can easily do this in one namespace (`k0rdent`) of the management cluster without worrying that other users have access to cluster and service configurations that are not yet properly tested. As soon as some templates are ready to use, they are approved by k0rdent Admin to separate namespaces (`blue`) and can be used by users that responsible for bootstrapping and maintaing the infrastructure (we call them `Platform Engineer` in these demos).
+
+This demo assumes that you completed: 
+- [Demo 5](#demo-5-approve-clustertemplate--infracredentials-for-separate-namespace) and [Demo 6](#demo-6-use-approved-clustertemplate-in-separate-namespace) and have the fully deployed `dev1` cluster in the `blue` namespace
+- [Demo 1](#demo-1-standalone-cluster-deployment) or [Demo Cluster Setup](#demo-cluster-setup) and have the fully deployed `test1` cluster in the `k0rdent` namespace
+
+At this point we have the the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and provisoned cluster from this template in both `k0rdent` and `blue` namespaces. Let's say that k0rdent Admin has a request to upgrade clusters. 
+
+
+1. Complete the [Demo 2](#demo-2-single-standalone-cluster-upgrade) and make sure that the cluster `test1` in the `k0rdent` namespace is fully upgraded.
+
+    If you have done this - it's completely fine, you already familiar with the cluster upgrade process.
+    
+    At this point we, as k0rdent Admins developed a new ClusterTemplate `demo-aws-standalone-cp-0.0.2` with the cluster upgrade, tested it by upgrading `test1` cluster in the `k0rdent` namespace, but `Platform Engineer` users still doesn't see new `ClusterTemplate` and can't use them.
+
+2. Check as `Platform Engineer` the list of available Cluster Templates in the `blue` namespace:
+    ```shell
+    KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" PATH=$PATH:./bin kubectl get clustertemplates -n blue
+    ```
+
+    The output should be:
+    ```
+    NAME                           VALID
+    demo-aws-standalone-cp-0.0.1   true
+    ```
+
+    As you can see, we don't have the `demo-aws-standalone-cp-0.0.2` cluster template. And, due to the access to the `k0rdent` namespace is restricted for `Platform Engineer` user, it's not possible to check what not released templates exist:
+    ```shell
+    KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" PATH=$PATH:./bin kubectl get clustertemplates -n k0rdent
+    ```
+
+    The output should be:
+    ```
+    Error from server (Forbidden): clustertemplates.hmc.mirantis.com is forbidden: User "platform-engineer1" cannot list resource "clustertemplates" in API group "hmc.mirantis.com" in the namespace "k0rdent"
+    ```
+
+    And also we check that the list of available upgrades for the cluster `dev1` in the `blue` namespace is empty:
+    ```shell
+    make get-available-upgrades-blue
+    ```
+
+    The output should be (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
+    ```
+    Cluster blue-aws-dev1-<username> available upgrades: 
+
+    ```
+
+3. But, let's imagine that `Platform Engineer` somehow learned about the existence of a new `demo-aws-standalone-cp-0.0.2` template and decided to upgrade the cluster in the `blue` namespace:
+    ```shell
+    make apply-cluster-deployment-aws-dev1-0.0.2
+    ```
+
+    The output should contain this line:
+    ```
+    Error from server (NotFound): admission webhook "validation.clusterdeployment.hmc.mirantis.com" denied the request: ClusterTemplate.hmc.mirantis.com "demo-aws-standalone-cp-0.0.2" not found
+    ```
+
+    It says that cluster template with the name `demo-aws-standalone-cp-0.0.2` is not found in the `blue` namespace.
+
+4. Now, when the `demo-aws-standalone-cp-0.0.2` ClusterTemplate is fully tested and ready to be released, we approve the ClusterTemplateChain that manages to the `blue` namespace:
+    ```shell
+    make approve-clustertemplatechain-aws-standalone-cp-0.0.2
+    ```
+
+    Check the status of the `hmc` AccessManagement object:
+    ```shell
+    make get-yaml-accessmanagement
+    ```
+
+    In the status section you can find information about the `demo-aws-standalone-cp-0.0.2` ClustertemplateChain that was approved to the target `blue` namespace:
+    ```
+    apiVersion: hmc.mirantis.com/v1alpha1
+    kind: AccessManagement
+    ...
+    status:
+      ...
+      current:
+      - clusterTemplateChains:
+        - demo-aws-standalone-cp-0.0.1
+        - demo-aws-standalone-cp-0.0.2
+        ...
+        targetNamespaces:
+          list:
+          - blue
+    ```
+
+3. Show that the platform engineer now can see approved `demo-aws-standalone-cp-0.0.2` ClusterTemplate in the `blue` namespace:
+    ```shell
+    KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" PATH=$PATH:./bin kubectl get clustertemplates -n blue
+    ```
+
+    Output:
+    ```
+    NAME                           VALID
+    demo-aws-standalone-cp-0.0.1   true
+    demo-aws-standalone-cp-0.0.2   true
+    ```
+
 ## Demo 8: Use newly approved ClusterTemplate in separate Namespace
+
+> Expected completion time ~10 min
+
+This demo assumes that you completed the [Demo 7](#demo-7-test-new-clustertemplate-as-k0rdent-admin-then-approve-them-in-separate-namespace) and shows how to upgrade an existing cluster as Platform Engineer using the tested and approved ClusterTemplate.
+
+It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo-aws-standalone-cp-0.0.1` template) to `v1.31.3+k0s.0` (which is part of `demo-aws-standalone-cp-0.0.2`)
+
+1. In [Demo 7](#demo-7-test-new-clustertemplate-as-k0rdent-admin-then-approve-them-in-separate-namespace) we approved released ClusterTemplate `demo-aws-standalone-cp-0.0.2` to the `blue` namespace and the fact that cluster `dev1` has upgrade available will be reported by k0rdent. You can find all available upgrades for all cluster deployments by executing this command:
+
+    ```shell
+    make get-available-upgrades-blue
+    ```
+
+    Example output (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
+    ```
+    Cluster blue-aws-dev1-<username> available upgrades: 
+      - demo-aws-standalone-cp-0.0.2
+    ```
+
+3. Apply Upgrade of the cluster:
+    ```shell
+    make apply-cluster-deployment-aws-dev1-0.0.2
+    ```
+
+4. Monitor the rollout of the upgrade
+
+    You can watch how new machines are created and old machines are deleted:
+    ```shell
+    KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" PATH=$PATH:./bin kubectl -n blue get machines -w
+    ```
+
+    You will see how for cluster `dev1` the k0s control plane node version is upgraded to the new one, then one by one new worker nodes should be provisioned and put into `Running` state, and old nodes should be removed.
+
+    > Hint: control plane nodes for k0s clusters are being upgraded in place (check the version field) without provisioning new machines.
+
+    Or how in the created cluster old nodes are drained and new nodes are attached:
+    ```shell
+    KUBECONFIG="kubeconfigs/blue-aws-dev1.kubeconfig" PATH=$PATH:./bin kubectl get node -w
+    ```
 
 ## Demo 9: Approve ServiceTemplate in separate Namespace
 
@@ -685,9 +824,9 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 1. Apply ServiceTemplate to the cluster in blue namespace that was created in [Demo 6](#demo-6-use-approved-clustertemplate-in-separate-namespace) (this will be ran as platform engineer):
     ```shell
-    make apply-cluster-deployment-aws-dev1-0.0.1-ingress
+    make apply-cluster-deployment-aws-dev1-ingress
     ```
-    This applies the [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) yaml template. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `serviceTemplate` key
+    This applies either [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) or [0.0.2-ingress.yaml](clusterDeployments/aws/0.0.2-ingress.yaml) yaml template, depending on what version of ClusterTemplate is deployed. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `serviceTemplate` key
 
 
 2. Monitor how the ingress-nginx is installed in `dev1` cluster:
