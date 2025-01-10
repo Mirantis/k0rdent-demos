@@ -11,6 +11,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 ## Table of Contents
 
 1. [Setup](#setup)
+   1. [Prerequisites](#prerequisites)
    1. [General setup](#general-setup)
    1. [Infrastructure setup](#infra-setup)
       1. [AWS setup](#aws-setup)
@@ -28,6 +29,33 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 1. [Cleaning up](#cleaning-up)
 
 ## Setup
+
+### Prerequisites
+
+Tools needed to run this demo are
+- Docker
+- Git
+- make
+
+If you're unsure about whether your system is supported and whether all tools are installed correctly, we provide a script that helps you answer this questions.
+Follow these steps to download and run the script to check your setup.
+
+1. Ensure you have a Bash-compatible shell (Linux, macOS).
+1. Download the Script:
+   You can download the script directly [here](https://raw.githubusercontent.com/Mirantis/k0rdent-demos/refs/heads/main/scripts/check-prerequisites.sh) or via `curl`.
+   For example, to download the script using `curl`, run the following command in your terminal:
+
+   ```shell
+   curl -o check-prerequisites.sh https://raw.githubusercontent.com/Mirantis/k0rdent-demos/refs/heads/main/scripts/check-prerequisites.sh
+   ```
+1. Make it executable
+   ```shell
+   chmod +x check-prerequisites.sh
+   ```
+1. Run the script
+   ```shell
+   ./check-prerequisites.sh
+   ```
 
 The Setup part for Demos is assumed to be created once before an actual demo is given.
 
