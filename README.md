@@ -40,7 +40,7 @@ Tools needed to run this demo are
 If you're unsure about whether your system is supported and whether all tools are installed correctly, we provide a script that helps you answer this questions.
 Follow these steps to download and run the script to check your setup.
 
-1. Ensure you have a Bash-compatible shell (Linux, macOS, or WSL on Windows).
+1. Ensure you have a Bash-compatible shell (Linux, macOS).
 1. Download the Script:
    You can download the script directly [here](https://raw.githubusercontent.com/Mirantis/k0rdent-demos/refs/heads/main/scripts/check-prerequisites.sh) or via `curl`.
    For example, to download the script using `curl`, run the following command in your terminal:

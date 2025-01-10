@@ -8,7 +8,6 @@ declare -A make_os_urls
 make_os_urls["Linux"]=""
 make_os_urls["Unknown"]=""
 make_os_urls["macOS"]="https://stackoverflow.com/questions/10265742/how-to-install-make-and-gcc-on-a-mac"
-make_os_urls["Windows"]="https://stackoverflow.com/questions/32127524/how-to-install-and-use-make-in-windows"
 
 # Function to check if a command exists and store the result
 check_tool() {
@@ -33,7 +32,6 @@ detect_os() {
   case "$(uname -s)" in
     Linux*)         os="Linux" ;;
     Darwin*)        os="macOS" ;;
-    CYGWIN*|MINGW*) os="Windows" ;;
     *)              os="Unknown" ;;
   esac
 
