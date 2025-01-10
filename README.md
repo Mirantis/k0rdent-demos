@@ -45,15 +45,15 @@ Follow these steps to download and run the script to check your setup.
    You can download the script directly [here](https://raw.githubusercontent.com/Mirantis/k0rdent-demos/refs/heads/main/scripts/check-prerequisites.sh) or via `curl`.
    For example, to download the script using `curl`, run the following command in your terminal:
 
-   ```bash
+   ```shell
    curl -o check-prerequisites.sh https://raw.githubusercontent.com/Mirantis/k0rdent-demos/refs/heads/main/scripts/check-prerequisites.sh
    ```
 1. Make it executable
-   ```bash
+   ```shell
    chmod +x check-prerequisites.sh
    ```
 1. Run the script
-   ```bash
+   ```shell
    ./check-prerequisites.sh
    ```
 
