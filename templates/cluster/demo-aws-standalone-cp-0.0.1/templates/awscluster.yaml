@@ -12,6 +12,8 @@ spec:
   controlPlaneLoadBalancer:
     healthCheckProtocol: TCP
   network:
+    vpc:
+      availabilityZoneUsageLimit: {{ .Values.network.vpc.availabilityZoneUsageLimit }}
     additionalControlPlaneIngressRules:
       - description: "k0s controller join API"
         protocol: tcp
