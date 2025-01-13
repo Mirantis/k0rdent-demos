@@ -89,6 +89,7 @@ To get the full list of commands run `make help`.
     capi: true
     cluster-api-provider-aws: true
     cluster-api-provider-azure: true
+    cluster-api-provider-openstack: true
     cluster-api-provider-vsphere: true
     hmc: true
     k0smotron: true
@@ -133,6 +134,10 @@ This assumes that you already have configured the required [AWS IAM Roles](https
     export AWS_ACCESS_KEY_ID="AWS Access Key ID"
     export AWS_SECRET_ACCESS_KEY="AWS Secret Access Key"
     ````
+2. If you use SSO authentication in AWS, export session token:
+    ```shell
+    export AWS_SESSION_TOKEN="AWS Session Token"
+    ```
 2. By default, it will provision all resources in the `us-west-2` AWS region. If you want to change this, export `AWS_REGION` environment variable:
     ```shell
     export AWS_REGION="us-east-1"
@@ -672,14 +677,14 @@ This demo assumes that you completed:
 - [Demo 5](#demo-5-approve-clustertemplate--infracredentials-for-separate-namespace) and [Demo 6](#demo-6-use-approved-clustertemplate-in-separate-namespace) and have the fully deployed `dev1` cluster in the `blue` namespace
 - [Demo 1](#demo-1-standalone-cluster-deployment) or [Demo Cluster Setup](#demo-cluster-setup) and have the fully deployed `test1` cluster in the `k0rdent` namespace
 
-At this point we have the the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and provisoned cluster from this template in both `k0rdent` and `blue` namespaces. Let's say that k0rdent Admin has a request to upgrade clusters. 
+At this point we have the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and provisoned clusters from this template in both `k0rdent` and `blue` namespaces. Let's say that k0rdent Admin has a request to upgrade clusters. 
 
 
 1. Complete the [Demo 2](#demo-2-single-standalone-cluster-upgrade) and make sure that the cluster `test1` in the `k0rdent` namespace is fully upgraded.
 
     If you have done this - it's completely fine, you already familiar with the cluster upgrade process.
     
-    At this point we, as k0rdent Admins developed a new ClusterTemplate `demo-aws-standalone-cp-0.0.2` with the cluster upgrade, tested it by upgrading `test1` cluster in the `k0rdent` namespace, but `Platform Engineer` users still doesn't see new `ClusterTemplate` and can't use them.
+    Now we, as k0rdent Admins developed a new ClusterTemplate `demo-aws-standalone-cp-0.0.2` with the cluster upgrade, tested it by upgrading `test1` cluster in the `k0rdent` namespace, but `Platform Engineer` users still doesn't see new `ClusterTemplate` and can't use them.
 
 2. Check as `Platform Engineer` the list of available Cluster Templates in the `blue` namespace:
     ```shell
@@ -692,7 +697,7 @@ At this point we have the the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and
     demo-aws-standalone-cp-0.0.1   true
     ```
 
-    As you can see, we don't have the `demo-aws-standalone-cp-0.0.2` cluster template. And, due to the access to the `k0rdent` namespace is restricted for `Platform Engineer` user, it's not possible to check what not released templates exist:
+    As you can see, we don't have the `demo-aws-standalone-cp-0.0.2` cluster template in the `blue` namespace. And, due to the access to the `k0rdent` namespace is restricted for `Platform Engineer` user, it's not possible to check what not released templates exist:
     ```shell
     KUBECONFIG="certs/platform-engineer1/kubeconfig.yaml" PATH=$PATH:./bin kubectl get clustertemplates -n k0rdent
     ```
@@ -725,7 +730,7 @@ At this point we have the the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and
 
     It says that cluster template with the name `demo-aws-standalone-cp-0.0.2` is not found in the `blue` namespace.
 
-4. Now, when the `demo-aws-standalone-cp-0.0.2` ClusterTemplate is fully tested and ready to be released, we approve the ClusterTemplateChain that manages to the `blue` namespace:
+4. Now, when the `demo-aws-standalone-cp-0.0.2` ClusterTemplate is fully tested and ready to be released, we, as k0rdent admins, approve the ClusterTemplateChain for this template to the `blue` namespace:
     ```shell
     make approve-clustertemplatechain-aws-standalone-cp-0.0.2
     ```
