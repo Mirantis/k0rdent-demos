@@ -1,0 +1,26 @@
+---
+name: Validate templates
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-cluster-templates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Verify templates
+        run: |
+          find templates/cluster -maxdepth 1 -mindepth 1 -type d -exec helm template {} > /dev/null \;
