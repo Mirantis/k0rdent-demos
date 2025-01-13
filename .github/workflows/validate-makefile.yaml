@@ -1,0 +1,25 @@
+---
+name: Validate Makefile targets
+
+on:
+  push: {}
+  pull_request: {}
+
+jobs:
+  validate-makefile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: "Install dependencies"
+        run: pip install -r scripts/requirements.txt
+
+      - name: Validate Makefile targets
+        run: python scripts/validate-makefile-targets.py
