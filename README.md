@@ -948,3 +948,8 @@ As running the whole k0rdent setup can be quite taxing on your hardware, run the
 ```shell
   make cleanup
 ```
+
+To reset management cluster and cleanup only `ClusterDeployment` objects you can run the command:
+```shell
+  make cleanup-clusters
+```
