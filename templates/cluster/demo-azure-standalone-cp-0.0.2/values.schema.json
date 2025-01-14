@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a k0s cluster on Azure with bootstrapped control plane nodes.",
+  "description": "A kcm template to deploy a k0s cluster on Azure with bootstrapped control plane nodes.",
   "type": "object",
   "required": [
     "controlPlaneNumber",
@@ -49,6 +49,13 @@
             }
           }
         }
+      }
+    },
+    "clusterLabels": {
+      "description": "Custom labels that will be applied to created CAPI Cluster object",
+      "type": "object",
+      "patternProperties": {
+        ".+": { "type": "string" }
       }
     },
     "location": {

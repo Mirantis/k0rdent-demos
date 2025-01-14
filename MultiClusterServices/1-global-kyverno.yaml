@@ -1,13 +1,14 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: MultiClusterService
 metadata:
   name: global-kyverno
 spec:
-  servicesPriority: 1000
   clusterSelector:
     matchLabels:
-      app.kubernetes.io/managed-by: Helm
-  services:
-    - template: demo-kyverno-3.2.6
-      name: kyverno
-      namespace: kyverno
+      k0rdent: demo
+  serviceSpec:
+    priority: 1000
+    services:
+      - template: demo-kyverno-3.2.6
+        name: kyverno
+        namespace: kyverno

@@ -86,13 +86,14 @@ To get the full list of commands run `make help`.
     In this command we track the `Management` object that is created by k0rdent. Don't worry if you get message that the object is not found, it can take some time.
     Wait until the output of the command be as follows to make sure that k0rdent project is fully installed:
     ```
+    Status of the k0rdent components installation: 
     capi: true
     cluster-api-provider-aws: true
     cluster-api-provider-azure: true
     cluster-api-provider-openstack: true
     cluster-api-provider-vsphere: true
-    hmc: true
     k0smotron: true
+    kcm: true
     projectsveltos: true
     ```
     For detailed explanation, please refer to the [documentation](./documentation/2-general-setup-deploy-k0rdent.md).
@@ -422,7 +423,7 @@ In order to run this demo you need [`Demo 1`](#demo-1-standalone-cluster-deploym
     ```shell
     make apply-cluster-deployment-aws-test2-ingress
     ```
-    This applies the [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) yaml template. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `serviceTemplate` key
+    This applies the [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) yaml template. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `spec.serviceSpec.services` key that contains now the reference to the previously created ServiceTemplate `demo-ingress-nginx-4.11.0`
 
 
 3. Monitor how the ingress-nginx is installed in `test2` cluster:
@@ -474,7 +475,7 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
     ```shell
     make apply-servicetemplate-demo-kyverno-3.2.6
     ```
-    This will install a new [ServiceTemplate](./templates/service/demo-kyverno-3.2.6.yaml) which installs a standard installation of kyverno in a cluster.
+    This will install a new [ServiceTemplate](./templates/service/demo-kyverno-3.2.6.yaml) which deploys a standard installation of kyverno in a cluster.
 
     You can find this new ServiceTemplate in the list of template with the command:
     ```shell
@@ -495,15 +496,36 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
     make apply-multiclusterservice-global-kyverno
     ```
 
-    This will install a `hmc.mirantis.com/v1alpha1/MultiClusterService` cluster-wide object to the management cluster. It has a clusterSelector configuration of the label `app.kubernetes.io/managed-by: Helm` which selects all `cluster.x-k8s.io/v1beta1/Cluster` objects with this label. Please, don't confuse `hmc.mirantis.com/v1alpha1/ClusterDeployment` and `cluster.x-k8s.io/v1beta1/Cluster` types. First one - is the type of Project k0rdent objects, we deploy them to the management cluster and then, kcm operator creates various objects, including CAPI `cluster.x-k8s.io/v1beta1/Cluster`. `hmc.mirantis.com/v1alpha1/MultiClusterService` relies on `cluster.x-k8s.io/v1beta1/Cluster` labels. Currently, it's not possible to specify them in the `ClusterDeployment` object configuration, there is an [issue](https://github.com/Mirantis/hmc/issues/801) on GitHub. But, to demonostrate the possibility of deploying service to multiple clusters without specifiying in each `ClusterDeployment` object, we will use in this demo the `app.kubernetes.io/managed-by: Helm` label, which is automatically set to all `cluster.x-k8s.io/v1beta1/Cluster` objects by k0rdent.
+    This will install a `MultiClusterService.k0rdent.mirantis.com` cluster-wide object to the management cluster. It has a clusterSelector configuration of the label `k0rdent: demo` which selects all `Cluster.cluster.x-k8s.io` objects with this label. Please, don't confuse `ClusterDeployment.k0rdent.mirantis.com` and `Cluster.cluster.x-k8s.io` types. The first one is the type of Project k0rdent objects, we deploy them to the management cluster and then, the kcm operator creates various objects, including the CAPI `Cluster.cluster.x-k8s.io`. `MultiClusterService.k0rdent.mirantis.com` relies on `Cluster.cluster.x-k8s.io` labels. To set labels on related `Cluster.cluster.x-k8s.io` objects we have the appropriate property in the `ClusterDeployment.k0rdent.mirantis.com` - `spec.config.clusterLabels`. And if you check ClusterDeployment templates that we use in these demos for deployments, you can find that all of them has the following value for this property:
+    ```
+    ...
+    clusterLabels:
+      k0rdent: demo
+    ...
+    ```
+    
+    And if we check created `Cluster.cluster.x-k8s.io` objects, we can find that all of them have this label:
+    ```shell
+    PATH=$PATH:./bin kubectl -n k0rdent get clusters -L k0rdent
+    ```
+
+    The output should be similar to (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
+    ```
+    PATH=$PATH:./bin kubectl -n k0rdent get clusters -L k0rdent
+    NAME                           CLUSTERCLASS   PHASE         AGE   VERSION   K0RDENT
+    k0rdent-aws-test1-<username>                  Provisioned   79m             demo
+    k0rdent-aws-test2-<username>                  Provisioned   31m             demo
+    ```
+
+    And this means that the `MultiClusterService.k0rdent.mirantis.com` global-kyverno that we deployed at the start of this step should be deployed to both clusters
 
 3. Monitor how the kyverno service is being installed in both clusters that we deployed previously:
     ```shell
-    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test1.kubeconfig" kubectl get pods -n kyverno
+    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test1.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno
     ```
 
     ```shell
-    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" kubectl get pods -n kyverno
+    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno
     ```
 
     There might be a couple of seconds delay before that k0rdent and sveltos needs to start the installation of kyverno, give it at least 1 mins.
@@ -524,7 +546,7 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
     In the output you can find information about clusters where the service is deployed (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: MultiClusterService
     ...
     status:
@@ -574,7 +596,7 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
     In the status section you can find information about the clustertemplate that was approved to the target `blue` namespace:
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: AccessManagement
     ...
     status:
@@ -592,14 +614,14 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
     make approve-credential-aws
     ```
 
-    Check the status of the `hmc` AccessManagement object:
+    Check the status of the `kcm` AccessManagement object:
     ```shell
     make get-yaml-accessmanagement
     ```
 
     In the status section you can find information about the clustertemplate that was approved to the target `blue` namespace:
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: AccessManagement
     ...
     status:
@@ -620,10 +642,10 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
     Output:
     ```
     NAME                                                    READY   DESCRIPTION
-    credential.hmc.mirantis.com/aws-cluster-identity-cred   true    AWS credentials
+    credential.k0rdent.mirantis.com/aws-cluster-identity-cred   true    AWS credentials
 
     NAME                                                            VALID
-    clustertemplate.hmc.mirantis.com/demo-aws-standalone-cp-0.0.1   true
+    clustertemplate.k0rdent.mirantis.com/demo-aws-standalone-cp-0.0.1   true
     ```
 
 ## Demo 6: Use approved ClusterTemplate in separate Namespace
@@ -642,10 +664,10 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
     make watch-aws-dev1
     ```
 
-    Example of the output of fully deployed first cluster:
+    Example of the output of fully deployed first cluster(username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
     ```
     NAME            READY   STATUS
-    blue-aws-dev1   True    ClusterDeployment is ready
+    blue-aws-dev1-<username>   True    ClusterDeployment is ready
     ```
 
 
@@ -704,7 +726,7 @@ At this point we have the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and pro
 
     The output should be:
     ```
-    Error from server (Forbidden): clustertemplates.hmc.mirantis.com is forbidden: User "platform-engineer1" cannot list resource "clustertemplates" in API group "hmc.mirantis.com" in the namespace "k0rdent"
+    Error from server (Forbidden): clustertemplates.k0rdent.mirantis.com is forbidden: User "platform-engineer1" cannot list resource "clustertemplates" in API group "k0rdent.mirantis.com" in the namespace "k0rdent"
     ```
 
     And also we check that the list of available upgrades for the cluster `dev1` in the `blue` namespace is empty:
@@ -725,7 +747,7 @@ At this point we have the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and pro
 
     The output should contain this line:
     ```
-    Error from server (NotFound): admission webhook "validation.clusterdeployment.hmc.mirantis.com" denied the request: ClusterTemplate.hmc.mirantis.com "demo-aws-standalone-cp-0.0.2" not found
+    Error from server (NotFound): admission webhook "validation.clusterdeployment.k0rdent.mirantis.com" denied the request: ClusterTemplate.k0rdent.mirantis.com "demo-aws-standalone-cp-0.0.2" not found
     ```
 
     It says that cluster template with the name `demo-aws-standalone-cp-0.0.2` is not found in the `blue` namespace.
@@ -735,14 +757,14 @@ At this point we have the `demo-aws-standalone-cp-0.0.1` ClusterTemplate and pro
     make approve-clustertemplatechain-aws-standalone-cp-0.0.2
     ```
 
-    Check the status of the `hmc` AccessManagement object:
+    Check the status of the `kcm` AccessManagement object:
     ```shell
     make get-yaml-accessmanagement
     ```
 
     In the status section you can find information about the `demo-aws-standalone-cp-0.0.2` ClustertemplateChain that was approved to the target `blue` namespace:
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: AccessManagement
     ...
     status:
@@ -819,14 +841,14 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
     make approve-servicetemplatechain-ingress-nginx-4.11.0
     ```
 
-    Check the status of the `hmc` AccessManagement object:
+    Check the status of the `kcm` AccessManagement object:
     ```shell
     make get-yaml-accessmanagement
     ```
 
     In the status section you can find information about the `ServiceTemplateChain` that was approved to the target `blue` namespace:
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: AccessManagement
     ...
     status:
@@ -859,7 +881,7 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
     ```shell
     make apply-cluster-deployment-aws-dev1-ingress
     ```
-    This applies either [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) or [0.0.2-ingress.yaml](clusterDeployments/aws/0.0.2-ingress.yaml) yaml template, depending on what version of ClusterTemplate is deployed. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `serviceTemplate` key
+    This applies either [0.0.1-ingress.yaml](clusterDeployments/aws/0.0.1-ingress.yaml) or [0.0.2-ingress.yaml](clusterDeployments/aws/0.0.2-ingress.yaml) yaml template, depending on what version of ClusterTemplate is deployed. For simplicity the yamls are a full `ClusterDeployment` Object and not just a diff from the original cluster. The command output will show you a diff that explains that the only thing that actually has changed is the `spec.serviceSpec.services` key
 
 
 2. Monitor how the ingress-nginx is installed in `dev1` cluster:
@@ -920,7 +942,7 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
 
     In the output you can find information about clusters where the service is deployed:
     ```
-    apiVersion: hmc.mirantis.com/v1alpha1
+    apiVersion: k0rdent.mirantis.com/v1alpha1
     kind: MultiClusterService
     ...
     status:
@@ -946,10 +968,10 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
 
 As running the whole k0rdent setup can be quite taxing on your hardware, run the following command to clean up everything (both the public cloud resources mentioned above but also all local containers):
 ```shell
-  make cleanup
+make cleanup
 ```
 
 To reset management cluster and cleanup only `ClusterDeployment` objects you can run the command:
 ```shell
-  make cleanup-clusters
+make cleanup-clusters
 ```
