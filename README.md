@@ -77,7 +77,7 @@ To get the full list of commands run `make help`.
     ```shell
     make deploy-k0rdent
     ```
-    The Demos in this repo require at least k0rdent v0.0.6 or newer. You can change the version by specifying the `KCM_VERSION` environment variable. List of releases can be found [here](https://github.com/K0rdent/kcm/releases).
+    The Demos in this repo require at least k0rdent v0.0.7 or newer. You can change the version by specifying the `KCM_VERSION` environment variable. List of releases can be found [here](https://github.com/K0rdent/kcm/releases).
 
 3. Monitor the installation of k0rdent:
     ```shell
