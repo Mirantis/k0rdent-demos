@@ -1,4 +1,4 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: ${NAMESPACE}-azure-${CLUSTERNAME}${UNIQUE_SUFFIX}
@@ -17,7 +17,7 @@ spec:
       vmSize: Standard_A4_v2
     clusterIdentity:
       name: azure-cluster-identity
-      namespace: hmc-system
+      namespace: k0rdent
   services:
     - template: demo-ingress-nginx-4.11.0
       name: ingress-nginx

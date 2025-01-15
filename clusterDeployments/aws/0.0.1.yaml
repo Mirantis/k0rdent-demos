@@ -1,4 +1,4 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: ${NAMESPACE}-aws-${CLUSTERNAME}${UNIQUE_SUFFIX}
@@ -9,6 +9,8 @@ spec:
   config:
     region: ${AWS_REGION}
     publicIP: true
+    clusterLabels:
+      k0rdent: demo
     controlPlaneNumber: 1
     workersNumber: 2
     controlPlane:

@@ -10,6 +10,8 @@ clusterNetwork:
     cidrBlocks:
     - "10.96.0.0/12"
 
+clusterLabels: {}
+
 # Azure cluster parameters
 location: ""
 subscriptionID: ""
@@ -19,7 +21,7 @@ bastion:
     azureBastion: {}
 clusterIdentity:
   name: ""
-  namespace: hmc-system
+  namespace: k0rdent
 # Azure machines parameters
 controlPlane:
   sshPublicKey: ""

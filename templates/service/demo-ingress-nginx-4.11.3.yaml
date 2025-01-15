@@ -1,4 +1,4 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ServiceTemplate
 metadata:
   name: demo-ingress-nginx-4.11.3
@@ -13,7 +13,7 @@ spec:
         kind: HelmRepository
         name: k0rdent-demos
 ---
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ServiceTemplateChain
 metadata:
   name: demo-ingress-nginx-4.11.3

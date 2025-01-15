@@ -4,10 +4,10 @@ SHELL := /bin/bash
 .EXPORT_ALL_VARIABLES:
 
 KCM_NAMESPACE ?= k0rdent
-KCM_REPO ?= oci://ghcr.io/k0rdent/kcm/charts/hmc
-KCM_VERSION ?= 0.0.6
-KCM_MANAGEMENT_OBJECT_NAME = hmc
-KCM_ACCESS_MANAGEMENT_OBJECT_NAME = hmc
+KCM_REPO ?= oci://ghcr.io/k0rdent/kcm/charts/kcm
+KCM_VERSION ?= 0.0.7
+KCM_MANAGEMENT_OBJECT_NAME = kcm
+KCM_ACCESS_MANAGEMENT_OBJECT_NAME = kcm
 
 TESTING_NAMESPACE ?= k0rdent
 TARGET_NAMESPACE ?= blue
@@ -284,7 +284,7 @@ get-yaml-%: .check-binary-kubectl
 	@$(KUBECTL) -n $(NAMESPACE) get $(TYPE) $(OBJECT_NAME) -o yaml
 
 get-available-upgrades-%: .check-binary-kubectl
-	@$(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com -o go-template='{{ range $$_,$$cluster := .items }}Cluster {{ $$cluster.metadata.name}} available upgrades: {{"\n"}}{{ range $$_,$$upgrade := $$cluster.status.availableUpgrades}}{{"  - "}}{{ $$upgrade }}{{"\n"}}{{ end }}{{"\n"}}{{ end }}'
+	@$(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com -o go-template='{{ range $$_,$$cluster := .items }}Cluster {{ $$cluster.metadata.name}} available upgrades: {{"\n"}}{{ range $$_,$$upgrade := $$cluster.status.availableUpgrades}}{{"  - "}}{{ $$upgrade }}{{"\n"}}{{ end }}{{"\n"}}{{ end }}'
 
 
 ##@ Demo 1
@@ -369,17 +369,17 @@ apply-servicetemplate-demo-ingress-nginx-4.11.0: ## Deploy custom demo-ingress-n
 
 apply-cluster-deployment-aws-test1-ingress: CLUSTERNAME = test1
 apply-cluster-deployment-aws-test1-ingress: PROVIDER = aws
-apply-cluster-deployment-aws-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
 apply-cluster-deployment-aws-test1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
 
 apply-cluster-deployment-aws-test2-ingress: CLUSTERNAME = test2
 apply-cluster-deployment-aws-test2-ingress: PROVIDER = aws
-apply-cluster-deployment-aws-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
 apply-cluster-deployment-aws-test2-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
 
-get-yaml-clusterdeployment-aws-test2: TYPE = clusterdeployment.hmc.mirantis.com
+get-yaml-clusterdeployment-aws-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-test2: CLUSTERNAME = test2
 get-yaml-clusterdeployment-aws-test2: PROVIDER = aws
 get-yaml-clusterdeployment-aws-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
@@ -394,7 +394,7 @@ apply-servicetemplate-demo-kyverno-3.2.6: ## Deploy custom demo-kyverno-3.2.6
 apply-multiclusterservice-global-kyverno: template_path = MultiClusterServices/1-global-kyverno.yaml
 apply-multiclusterservice-global-kyverno: ## Deploy MultiClusterService global-kyverno that installs kyverno service to all cluster deployments
 
-get-yaml-milticlasterservice-global-kyverno: TYPE = multiclusterservice.hmc.mirantis.com
+get-yaml-milticlasterservice-global-kyverno: TYPE = multiclusterservice.k0rdent.mirantis.com
 get-yaml-milticlasterservice-global-kyverno: OBJECT_NAME = global-kyverno
 get-yaml-milticlasterservice-global-kyverno: ## Get global-kyverno MultiClusterService object in yaml format
 
@@ -448,7 +448,7 @@ approve-clustertemplatechain-aws-standalone-cp-0.0.1: ## Approve ClusterTemplate
 approve-credential-aws: credential_name = aws-cluster-identity-cred
 approve-credential-aws: ## Approve AWS Credentials into the target namespace
 
-get-yaml-accessmanagement: TYPE = accessmanagement.hmc.mirantis.com
+get-yaml-accessmanagement: TYPE = accessmanagement.k0rdent.mirantis.com
 get-yaml-accessmanagement: OBJECT_NAME = $(KCM_MANAGEMENT_OBJECT_NAME)
 get-yaml-accessmanagement: ## Get k0rdent AccessManagement object in yaml format
 
@@ -498,12 +498,12 @@ approve-servicetemplatechain-ingress-nginx-4.11.0: ## Approve ServiceTemplate in
 apply-cluster-deployment-aws-dev1-ingress: CLUSTERNAME = dev1
 apply-cluster-deployment-aws-dev1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
 apply-cluster-deployment-aws-dev1-ingress: PROVIDER = aws
-apply-cluster-deployment-aws-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.hmc.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-aws-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
 apply-cluster-deployment-aws-dev1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace
 
-get-yaml-clusterdeployment-aws-dev1: TYPE = clusterdeployment.hmc.mirantis.com
+get-yaml-clusterdeployment-aws-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-dev1: CLUSTERNAME = dev1
 get-yaml-clusterdeployment-aws-dev1: PROVIDER = aws
 get-yaml-clusterdeployment-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
@@ -518,8 +518,8 @@ get-yaml-clusterdeployment-aws-dev1: ## Get dev1 ClusterDeployment object from t
 cleanup-clusters: .check-binary-kubectl clean-certs
 cleanup-clusters: ## Tear down managed cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then \
-		$(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) delete clusterdeployment.hmc.mirantis.com --all -A --wait=false 2>/dev/null || true; \
-		while [[ $$($(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) get clusterdeployment.hmc.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 ]]; do \
+		$(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) delete clusterdeployment.k0rdent.mirantis.com --all -A --wait=false 2>/dev/null || true; \
+		while [[ $$($(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) get clusterdeployment.k0rdent.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 ]]; do \
 			echo "Waiting untill all cluster deployments are deleted..."; \
 			sleep 3; \
 		done; \

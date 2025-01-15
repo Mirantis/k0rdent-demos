@@ -1,5 +1,5 @@
 ---
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
   name: demo-azure-standalone-cp-0.0.2
@@ -14,7 +14,7 @@ spec:
         kind: HelmRepository
         name: k0rdent-demos
 ---
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplateChain
 metadata:
   name: demo-azure-standalone-cp-0.0.2
