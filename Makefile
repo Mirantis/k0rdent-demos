@@ -57,16 +57,16 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-KIND ?= PATH=$(LOCALBIN):$(PATH) kind
+KIND ?= PATH="$(LOCALBIN):$(PATH)" kind
 KIND_VERSION ?= 0.25.0
 
-HELM ?= PATH=$(LOCALBIN):$(PATH) helm
+HELM ?= PATH="$(LOCALBIN):$(PATH)" helm
 HELM_VERSION ?= v3.15.1
 
-YQ ?= PATH=$(LOCALBIN):$(PATH) yq
+YQ ?= PATH="$(LOCALBIN):$(PATH)" yq
 YQ_VERSION ?= v4.44.6
 
-KUBECTL ?= PATH=$(LOCALBIN):$(PATH) kubectl
+KUBECTL ?= PATH="$(LOCALBIN):$(PATH)" kubectl
 
 DOCKER_VERSION ?= 27.4.1
 
@@ -155,7 +155,7 @@ watch-k0rdent-deployment: ## Monitor k0rdent deployment
 
 # Setup Helm registry and push charts with custom Cluster and Service templates
 TEMPLATES_DIR := templates
-TEAMPLATES = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
+TEMPLATES = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts
 $(CHARTS_PACKAGE_DIR): | $(LOCALBIN)
@@ -239,7 +239,23 @@ apply-azure-creds: .check-variable-azure-sp-password .check-variable-azure-sp-ap
 apply-azure-creds: ## Setup Azure credentials
 
 get-creds-azure: creds_name = azure-cluster-identity-cred
-get-creds-azure: ## Get Azure credentials info
+get-creds-azure: ## Get Azure credentials info	
+
+# OpensStack
+.%-openstack-access-key: var_name = OS_APPLICATION_CREDENTIAL_ID
+.%-openstack-access-key: var_description = OpenStack application credential key
+.%-openstack-secret-access-key: var_name = OS_APPLICATION_CREDENTIAL_SECRET
+.%-openstack-secret-access-key: var_description = OpenStack application credential secret	
+.%-openstack-access-url: var_name = OS_AUTH_URL
+.%-openstack-access-url: var_description = OpenStack auth url	
+
+apply-openstack-creds: SHOW_DIFF = false
+apply-openstack-creds: template_path = setup/openstack-credentials.yaml
+apply-openstack-creds: .check-variable-openstack-access-key .check-variable-openstack-secret-access-key .check-variable-openstack-access-url
+apply-openstack-creds: ## Setup OpenStack credentials
+
+get-creds-openstack: creds_name = openstack-cluster-identity-cred
+get-creds-openstacks: ## Get OpenStack credentials info	
 
 ## Common targets and functions
 UNIQUE_SUFFIX = $(patsubst %,-%,$(USERNAME))
@@ -269,7 +285,7 @@ $(KUBECONFIGS_DIR):
 
 get-kubeconfig-%: NAMESPACE = $(TESTING_NAMESPACE)
 get-kubeconfig-%: .check-binary-kubectl
-	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-aws-$(CLUSTERNAME).kubeconfig
+	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME).kubeconfig
 
 # COMMAND is the yq expression that will be applied to the existing AccessManagement object
 # If the command that implements this template has any credential_name, cluster_template_chain_name or service_template_chain_name variables, it will be added to the AccessManagement object:
@@ -297,6 +313,10 @@ apply-clustertemplate-demo-azure-standalone-cp-0.0.1: SHOW_DIFF = false
 apply-clustertemplate-demo-azure-standalone-cp-0.0.1: template_path = templates/cluster/demo-azure-standalone-cp-0.0.1.yaml
 apply-clustertemplate-demo-azure-standalone-cp-0.0.1: ## Deploy custom demo-azure-standalone-cp-0.0.1 ClusterTemplate
 
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: SHOW_DIFF = false
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: template_path = templates/cluster/demo-openstack-standalone-cp-0.0.1.yaml
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: ## Deploy custom demo-openstack-standalone-cp-0.0.1 ClusterTemplate	
+
 apply-cluster-deployment-aws-test1-0.0.1: CLUSTERNAME = test1
 apply-cluster-deployment-aws-test1-0.0.1: template_path = clusterDeployments/aws/0.0.1.yaml
 apply-cluster-deployment-aws-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to AWS
@@ -306,6 +326,10 @@ apply-cluster-deployment-azure-test1-0.0.1: template_path = clusterDeployments/a
 apply-cluster-deployment-azure-test1-0.0.1: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to Azure
 
+apply-cluster-deployment-openstack-test1-0.0.1: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-0.0.1: template_path = clusterDeployments/openstack/0.0.1.yaml
+apply-cluster-deployment-openstack-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to OpenStack	
+
 watch-aws-test1: CLUSTERNAME = test1
 watch-aws-test1: PROVIDER = aws
 watch-aws-test1: ## Monitor the provisioning process of the cluster deployment test1 in AWS
@@ -314,9 +338,17 @@ watch-azure-test1: CLUSTERNAME = test1
 watch-azure-test1: PROVIDER = azure
 watch-azure-test1: ## Monitor the provisioning process of the cluster deployment test1 in Azure
 
+watch-openstack-test1: CLUSTERNAME = test1
+watch-openstack-test1: PROVIDER = openstack
+watch-openstack-test1: ## Monitor the provisioning process of the cluster deployment test1 in OpenStack
+
 get-kubeconfig-aws-test1: CLUSTERNAME = test1
 get-kubeconfig-aws-test1: PROVIDER = aws
 get-kubeconfig-aws-test1: ## Get kubeconfig for the cluster test1
+
+get-kubeconfig-openstack-test1: CLUSTERNAME = test1
+get-kubeconfig-openstack-test1: PROVIDER = openstack
+get-kubeconfig-openstack-test1: ## Get kubeconfig for the cluster test1		
 
 apply-cluster-deployment-aws-test2-0.0.1: CLUSTERNAME = test2
 apply-cluster-deployment-aws-test2-0.0.1: template_path = clusterDeployments/aws/0.0.1.yaml
@@ -327,6 +359,10 @@ apply-cluster-deployment-azure-test2-0.0.1: template_path = clusterDeployments/a
 apply-cluster-deployment-azure-test2-0.0.2: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test2-0.0.1: ## Deploy cluster deployment test2 version 0.0.1 to Azure
 
+apply-cluster-deployment-openstack-test2-0.0.1: CLUSTERNAME = test2
+apply-cluster-deployment-openstack-test2-0.0.1: template_path = clusterDeployments/openstack/0.0.1.yaml
+apply-cluster-deployment-openstack-test2-0.0.1: ## Deploy cluster deployment test2 version 0.0.1 to OpenStack	
+
 watch-aws-test2: CLUSTERNAME = test2
 watch-aws-test2: PROVIDER = aws
 watch-aws-test2: ## Monitor the provisioning process of the cluster deployment test2 in AWS
@@ -335,9 +371,17 @@ watch-azure-test2: CLUSTERNAME = test2
 watch-azure-test2: PROVIDER = azure
 watch-azure-test2: ## Monitor the provisioning process of the cluster deployment test2 in Azure
 
+watch-openstack-test2: CLUSTERNAME = test2
+watch-openstack-test2: PROVIDER = openstack
+watch-openstack-test2: ## Monitor the provisioning process of the cluster deployment test2 in OpenStack	
+
 get-kubeconfig-aws-test2: CLUSTERNAME = test2
 get-kubeconfig-aws-test2: PROVIDER = aws
 get-kubeconfig-aws-test2: ## Get kubeconfig for the cluster test2
+
+get-kubeconfig-openstack-test2: CLUSTERNAME = test2
+get-kubeconfig-openstack-test2: PROVIDER = openstack
+get-kubeconfig-openstack-test2: ## Get kubeconfig for the cluster test2		
 
 ##@ Demo 2
 
@@ -348,6 +392,10 @@ apply-clustertemplate-demo-aws-standalone-cp-0.0.2: ## Deploy custom demo-aws-st
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: SHOW_DIFF = false
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: template_path = templates/cluster/demo-azure-standalone-cp-0.0.2.yaml
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: ## Deploy custom demo-azure-standalone-cp-0.0.2 ClusterTemplate
+
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: SHOW_DIFF = false
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: template_path = templates/cluster/demo-openstack-standalone-cp-0.0.2.yaml
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: ## Deploy custom demo-openstack-standalone-cp-0.0.2 ClusterTemplate	
 
 get-available-upgrades-k0rdent: NAMESPACE = $(TESTING_NAMESPACE)
 get-available-upgrades-k0rdent: ## Get available upgrades for all cluster deployments
@@ -361,6 +409,10 @@ apply-cluster-deployment-azure-test1-0.0.2: template_path = clusterDeployments/a
 apply-cluster-deployment-azure-test1-0.0.2: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2
 
+apply-cluster-deployment-openstack-test1-0.0.2: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
+apply-cluster-deployment-openstack-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2	
+
 ##@ Demo 3
 
 apply-servicetemplate-demo-ingress-nginx-4.11.0: SHOW_DIFF = false
@@ -373,17 +425,35 @@ apply-cluster-deployment-aws-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo
 apply-cluster-deployment-aws-test1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
 
+apply-cluster-deployment-openstack-test1-ingress: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-test1-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in OpenStack	
+
 apply-cluster-deployment-aws-test2-ingress: CLUSTERNAME = test2
 apply-cluster-deployment-aws-test2-ingress: PROVIDER = aws
 apply-cluster-deployment-aws-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
 apply-cluster-deployment-aws-test2-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
 
+apply-cluster-deployment-openstack-test2-ingress: CLUSTERNAME = test2
+apply-cluster-deployment-openstack-test2-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-test2-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in OpenStack	
+
 get-yaml-clusterdeployment-aws-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-test2: CLUSTERNAME = test2
 get-yaml-clusterdeployment-aws-test2: PROVIDER = aws
 get-yaml-clusterdeployment-aws-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-test2: ## Get test2 ClusterDeployment object in yaml format
+
+get-yaml-clusterdeployment-openstack-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-openstack-test2: CLUSTERNAME = test2
+get-yaml-clusterdeployment-openstack-test2: PROVIDER = openstack
+get-yaml-clusterdeployment-openstack-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-openstack-test2: ## Get test2 ClusterDeployment object in yaml format	
 
 ##@ Demo 4
 
@@ -394,9 +464,9 @@ apply-servicetemplate-demo-kyverno-3.2.6: ## Deploy custom demo-kyverno-3.2.6
 apply-multiclusterservice-global-kyverno: template_path = MultiClusterServices/1-global-kyverno.yaml
 apply-multiclusterservice-global-kyverno: ## Deploy MultiClusterService global-kyverno that installs kyverno service to all cluster deployments
 
-get-yaml-milticlasterservice-global-kyverno: TYPE = multiclusterservice.k0rdent.mirantis.com
-get-yaml-milticlasterservice-global-kyverno: OBJECT_NAME = global-kyverno
-get-yaml-milticlasterservice-global-kyverno: ## Get global-kyverno MultiClusterService object in yaml format
+get-yaml-multiclusterservice-global-kyverno: TYPE = multiclusterservice.k0rdent.mirantis.com
+get-yaml-multiclusterservice-global-kyverno: OBJECT_NAME = global-kyverno
+get-yaml-multiclusterservice-global-kyverno: ## Get global-kyverno MultiClusterService object in yaml format
 
 ##@ Demo 5
 
@@ -445,8 +515,14 @@ generate-platform-engineer1-kubeconfig: ## Create Platform Engineer user that ha
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: cluster_template_chain_name = demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.1 into the target namespace
 
+approve-clustertemplatechain-openstack-standalone-cp-0.0.1: cluster_template_chain_name = demo-openstack-standalone-cp-0.0.1
+approve-clustertemplatechain-openstack-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-openstack-standalone-cp-0.0.1 into the target namespace	
+
 approve-credential-aws: credential_name = aws-cluster-identity-cred
 approve-credential-aws: ## Approve AWS Credentials into the target namespace
+
+approve-credential-openstack: credential_name = openstack-cluster-identity-cred
+approve-credential-openstack: ## Approve OpenStack Credentials into the target namespace	
 
 get-yaml-accessmanagement: TYPE = accessmanagement.k0rdent.mirantis.com
 get-yaml-accessmanagement: OBJECT_NAME = $(KCM_MANAGEMENT_OBJECT_NAME)
@@ -458,7 +534,13 @@ apply-cluster-deployment-aws-dev1-0.0.1: CLUSTERNAME = dev1
 apply-cluster-deployment-aws-dev1-0.0.1: template_path = clusterDeployments/aws/0.0.1.yaml
 apply-cluster-deployment-aws-dev1-0.0.1: NAMESPACE = $(TARGET_NAMESPACE)
 apply-cluster-deployment-aws-dev1-0.0.1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
-apply-cluster-deployment-aws-dev1-0.0.1: ## Deploy cluster deployment AWS dev1 version 0.0.1 to the blue namespace as Platform Engineer
+apply-cluster-deployment-aws-dev1-0.0.1: ## Deploy cluster deployment AWS dev1 version 0.0.1 to the blue namespace as Platform Engineer	
+
+apply-cluster-deployment-openstack-dev1-0.0.1: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-0.0.1: template_path = clusterDeployments/openstack/0.0.1.yaml
+apply-cluster-deployment-openstack-dev1-0.0.1: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-0.0.1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-0.0.1: ## Deploy cluster deployment OpenStack dev1 version 0.0.1 to the blue namespace as Platform Engineer		
 
 watch-aws-dev1: CLUSTERNAME = dev1
 watch-aws-dev1: PROVIDER = aws
@@ -466,16 +548,31 @@ watch-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
 watch-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 watch-aws-dev1: ## Monitor the provisioning process of the AWS cluster deployment dev1 in blue namespace
 
+watch-openstack-dev1: CLUSTERNAME = dev1
+watch-openstack-dev1: PROVIDER = openstack
+watch-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+watch-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+watch-openstack-dev1: ## Monitor the provisioning process of the OpenStack cluster deployment dev1 in blue namespace	
+
 get-kubeconfig-aws-dev1: CLUSTERNAME = dev1
 get-kubeconfig-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
 get-kubeconfig-aws-dev1: PROVIDER = aws
 get-kubeconfig-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 get-kubeconfig-aws-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace
 
+get-kubeconfig-openstack-dev1: CLUSTERNAME = dev1
+get-kubeconfig-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-kubeconfig-openstack-dev1: PROVIDER = openstack
+get-kubeconfig-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-kubeconfig-openstack-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace	
+
 ##@ Demo 7
 
 approve-clustertemplatechain-aws-standalone-cp-0.0.2: cluster_template_chain_name = demo-aws-standalone-cp-0.0.2 demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.2 into the target namespace
+
+approve-clustertemplatechain-openstack-standalone-cp-0.0.2: cluster_template_chain_name = demo-openstack-standalone-cp-0.0.2 demo-openstack-standalone-cp-0.0.1
+approve-clustertemplatechain-openstack-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-openstack-standalone-cp-0.0.2 into the target namespace	
 
 ##@ Demo 8
 
@@ -487,6 +584,12 @@ apply-cluster-deployment-aws-dev1-0.0.2: template_path = clusterDeployments/aws/
 apply-cluster-deployment-aws-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
 apply-cluster-deployment-aws-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2
+
+apply-cluster-deployment-openstack-dev1-0.0.2: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
+apply-cluster-deployment-openstack-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2	
 
 ##@ Demo 9
 
@@ -503,13 +606,29 @@ apply-cluster-deployment-aws-dev1-ingress: template_path = clusterDeployments/aw
 apply-cluster-deployment-aws-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace
 
+apply-cluster-deployment-openstack-dev1-ingress: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-dev1-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace	
+
 get-yaml-clusterdeployment-aws-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-dev1: CLUSTERNAME = dev1
 get-yaml-clusterdeployment-aws-dev1: PROVIDER = aws
 get-yaml-clusterdeployment-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
 get-yaml-clusterdeployment-aws-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
-get-yaml-clusterdeployment-aws-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format
+get-yaml-clusterdeployment-aws-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format	
+
+get-yaml-clusterdeployment-openstack-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-openstack-dev1: CLUSTERNAME = dev1
+get-yaml-clusterdeployment-openstack-dev1: PROVIDER = openstack
+get-yaml-clusterdeployment-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-yaml-clusterdeployment-openstack-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-yaml-clusterdeployment-openstack-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format		
 
 
 ##@ Cleanup
@@ -520,7 +639,7 @@ cleanup-clusters: ## Tear down managed cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then \
 		$(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) delete clusterdeployment.k0rdent.mirantis.com --all -A --wait=false 2>/dev/null || true; \
 		while [[ $$($(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) get clusterdeployment.k0rdent.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 ]]; do \
-			echo "Waiting untill all cluster deployments are deleted..."; \
+			echo "Waiting until all cluster deployments are deleted..."; \
 			sleep 3; \
 		done; \
 	fi
