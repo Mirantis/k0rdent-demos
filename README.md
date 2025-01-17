@@ -73,6 +73,8 @@ To get the full list of commands run `make help`.
     
     For detailed explanation, please refer to the [documentation](./documentation/1-general-setup-bootstrap-kind-cluster.md).
 
+    N.B. You can skip this step if you wish to deploy to an existing cluster. Just make sure the relevant kubeconfig is already set, e.g. by exporting it as an environment variable.
+
 2. Install k0rdent into kind cluster:
     ```shell
     make deploy-k0rdent
@@ -123,6 +125,7 @@ As next you need to decide into which infrastructure you would like to install t
 
 - AWS
 - Azure
+- OpenStack
 
 #### AWS Setup
 
@@ -188,6 +191,33 @@ This assumes that you already have configured the required [Azure providers](htt
     ```
     NAME                          READY   DESCRIPTION
     azure-cluster-identity-cred   true    Azure credentials
+    ```
+
+#### OpenStack Setup
+
+> Expected completion time ~2 min
+
+This assumes that you already have configured an Application Credential in OpenStack.
+
+1. Export Application Credential as environment variables:
+    ```shell
+    export OS_APP_CRED_ID="OpenStack application credential key"
+    export OS_APP_CRED_SECRET="OpenStack application credential secret"
+    export OS_AUTH_URL="OpenStack auth url"
+    ````
+2. Install Credentials into k0rdent:
+    ```shell
+    make apply-openstack-creds
+    ```
+
+3. Check that credentials are ready to use
+    ```shell
+    make get-creds-openstack
+    ```
+    The output should be similar to:
+    ```
+    NAME                              READY   DESCRIPTION
+    openstack-cluster-identity-cred   true    OpenStack credentials
     ```
 
 ### Demo Cluster Setup

@@ -18,6 +18,12 @@ spec:
         name: helm-registry
         ports:
         - containerPort: $HELM_REGISTRY_INTERNAL_PORT
+        env:
+        - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+          value: /var/lib/registry
+        volumeMounts:
+        - name: registry-storage
+          mountPath: /var/lib/registry        
       volumes:
         - name: registry-storage
           persistentVolumeClaim:
@@ -32,7 +38,6 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: standard # kind local-path provisioner
   resources:
     requests:
       storage: 50Mi
