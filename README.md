@@ -16,6 +16,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
    1. [Infrastructure setup](#infra-setup)
       1. [AWS setup](#aws-setup)
       1. [Azure setup](#azure-setup)
+      1. [OpenStack setup](#openstack-setup)
 1. [Demo 1: Standalone Cluster Deployment](#demo-1-standalone-cluster-deployment)
 1. [Demo 2: Single Standalone Cluster Upgrade](#demo-2-single-standalone-cluster-upgrade)
 1. [Demo 3: Install ServiceTemplate into single cluster](#demo-3-install-servicetemplate-into-single-cluster)
