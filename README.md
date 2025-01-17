@@ -197,7 +197,7 @@ This assumes that you already have configured the required [Azure providers](htt
 
 > Expected completion time ~2 min
 
-This assumes that you already have configured an Application Credential in OpenStack.
+This assumes that you already have configured an Application Credential in OpenStack, the flavor "m1.medium" exists, and an image called "ubuntu-22.04" is present.
 
 1. Export Application Credential as environment variables:
     ```shell
