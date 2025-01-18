@@ -7,6 +7,10 @@ spec:
   template: demo-openstack-standalone-cp-0.0.2
   credential: openstack-cluster-identity-cred
   config:
+    clusterLabels:
+      k0rdent: demo    
+    clusterLabels:
+      k0rdent: demo    
     controlPlaneNumber: 1
     workersNumber: 2
     controlplane:

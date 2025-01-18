@@ -74,7 +74,7 @@ To get the full list of commands run `make help`.
     
     For detailed explanation, please refer to the [documentation](./documentation/1-general-setup-bootstrap-kind-cluster.md).
 
-    N.B. You can skip this step if you wish to deploy to an existing cluster. Just make sure the relevant kubeconfig is already set, e.g. by exporting it as an environment variable.
+    > N.B. You can skip this step if you wish to deploy to an existing cluster. Just make sure the relevant kubeconfig is already set, e.g. by exporting it as an environment variable.
 
 2. Install k0rdent into kind cluster:
     ```shell
@@ -362,6 +362,8 @@ In the real world this would most probably be done by a Platform Team Lead that 
 
 > Expected completion time ~10 min
 
+> Note: Currently not working correctly for OpenStack.
+
 This demo shows how to upgrade an existing cluster through the cluster template system. This expects [Demo 1](#demo-1-standalone-cluster-deployment) to be completed or the `aws-test1` cluster already created during the [Demo Setup](#demo-cluster-setup).
 
 This demo will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo-aws-standalone-cp-0.0.1` template) to `v1.31.3+k0s.0` (which is part of `demo-aws-standalone-cp-0.0.2`)
@@ -496,6 +498,8 @@ In order to run this demo you need [`Demo 1`](#demo-1-standalone-cluster-deploym
 
 > Expected completion time ~5 min
 
+> Note: Currently not working correctly for OpenStack.
+
 This Demo shows the capability of k0rdent to install a ServiceTemplate into multiple Clusters without the need to reference it in every cluster as we did in `Demo 3`.
 
 While this demo can be shown even if you only have a single cluster, its obviously better to be demoed with two clusters. If you followed along the demo process you should have two clusters.
@@ -614,6 +618,8 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 ## Demo 5: Approve ClusterTemplate & InfraCredentials for separate Namespace
 
 > Expected completion time ~2 min
+
+> Note: Currently not working correctly for OpenStack.
 
 1. Approve the clustertemplate into the blue namespace
     ```shell

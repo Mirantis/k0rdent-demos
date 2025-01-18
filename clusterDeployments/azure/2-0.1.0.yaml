@@ -7,6 +7,8 @@ spec:
   template: demo-azure-standalone-cp-0.0.2
   credential: azure-cluster-identity-cred
   config:
+    clusterLabels:
+      k0rdent: demo    
     controlPlaneNumber: 1
     workersNumber: 2
     location: "westus"

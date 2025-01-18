@@ -110,10 +110,17 @@ $(LOCALBIN)/%: $(LOCALBIN)
 %kind: binary = kind
 %kind: url = "https://kind.sigs.k8s.io/dl/v$(KIND_VERSION)/kind-$(OS)-$(ARCH)"
 %kubectl: binary = kubectl
-%kubectl: url = "https://dl.k8s.io/release/$(shell curl -L -s https://dl.k8s.io/release/stable.txt)/bin/$(OS)/$(ARCH)/kubectl"
 %helm: binary = helm
 %yq: binary = yq
 %yq: url = "https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)"
+
+.PHONY: kubectl
+kubectl: $(LOCALBIN)/kubectl ## Install kubectl binary locally if necessary
+$(LOCALBIN)/kubectl: | $(LOCALBIN)
+	@echo "Downloading kubectl..."
+	@curl -sLo $(LOCALBIN)/kubectl https://dl.k8s.io/release/$(shell curl -L -s https://dl.k8s.io/release/stable.txt)/bin/$(OS)/$(ARCH)/kubectl
+	@sudo install -o root -g root -m 0755 $(LOCALBIN)/kubectl /usr/local/bin/kubectl
+	@echo "kubectl installed successfully."
 
 .PHONY: kind
 kind: $(LOCALBIN)/kind ## Install kind binary locally if necessary
@@ -123,7 +130,7 @@ helm: $(LOCALBIN)/helm ## Install helm binary locally if necessary
 HELM_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3"
 $(LOCALBIN)/helm: | $(LOCALBIN)
 	rm -f $(LOCALBIN)/helm-*
-	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=false HELM_INSTALL_DIR=$(LOCALBIN) DESIRED_VERSION=$(HELM_VERSION) BINARY_NAME=helm bash
+	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=true bash
 
 
 ##@ General Setup
@@ -134,7 +141,7 @@ $(KIND_CLUSTER_CONFIG_PATH): $(LOCALBIN)
 	@cat setup/kind-cluster.yaml | envsubst > $(KIND_CLUSTER_CONFIG_PATH)
 
 .PHONY: bootstrap-kind-cluster
-bootstrap-kind-cluster: .check-binary-docker .check-binary-kind .check-binary-kubectl
+bootstrap-kind-cluster: .check-binary-docker .check-binary-kind .check-binary-kubectl check-kind-network
 bootstrap-kind-cluster: ## Provision local kind cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then\
 		echo "$(KIND_CLUSTER_NAME) kind cluster already installed";\
@@ -144,6 +151,22 @@ bootstrap-kind-cluster: ## Provision local kind cluster
 		$(KIND) create cluster --name=$(KIND_CLUSTER_NAME) --config=$(KIND_CLUSTER_CONFIG_PATH);\
 	fi
 	@$(KUBECTL) config use-context $(KIND_KUBECTL_CONTEXT)
+
+.PHONY: check-kind-network
+check-kind-network: ## Ensure the Docker network kind is configured correctly
+	@if docker network inspect kind >/dev/null 2>&1; then \
+		NETWORK_SUBNET=$$(docker network inspect kind --format '{{(index .IPAM.Config 0).Subnet}}'); \
+		if [ "$${NETWORK_SUBNET}" = "172.18.0.0/16" ]; then \
+			echo "Kind network has subnet 172.18.0.0/16, recreating..."; \
+			docker network rm kind; \
+			docker network create kind --subnet=10.24.0.0/16; \
+		else \
+			echo "Kind network is already configured correctly."; \
+		fi; \
+	else \
+		echo "Kind network not found, creating..."; \
+		docker network create kind --subnet=10.24.0.0/16; \
+	fi	
 
 # Deploy k0rdent operator
 .PHONY: deploy-k0rdent
@@ -354,7 +377,7 @@ $(KUBECONFIGS_DIR):
 
 get-kubeconfig-%: NAMESPACE = $(TESTING_NAMESPACE)
 get-kubeconfig-%: .check-binary-kubectl
-	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-aws-$(CLUSTERNAME).kubeconfig
+	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME).kubeconfig
 
 # COMMAND is the yq expression that will be applied to the existing AccessManagement object
 # If the command that implements this template has any credential_name, cluster_template_chain_name or service_template_chain_name variables, it will be added to the AccessManagement object:
@@ -593,7 +616,9 @@ $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr: $(PLATFORM_ENGINEER_CERTS
 		openssl req -new -key /certs/platform-engineer1/platform-engineer1.key -out /certs/platform-engineer1/platform-engineer1.csr -subj '/CN=platform-engineer1/O=$(TARGET_NAMESPACE)'"
 
 $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.crt: $(PLATFORM_ENGINEER_CERTS_DIR) $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr $(CERTS_CA_DIR)/ca.crt $(CERTS_CA_DIR)/ca.key
-	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360
+	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) bash -c \
+		"apt-get update && apt-get install -y openssl && \
+		openssl x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360"
 
 .PHONY: create-target-namespace-rolebindings
 create-target-namespace-rolebindings: .check-binary-kubectl
@@ -789,7 +814,7 @@ cleanup-clusters: ## Tear down managed cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then \
 		$(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) delete clusterdeployment.k0rdent.mirantis.com --all -A --wait=false 2>/dev/null || true; \
 		while [[ $$($(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) get clusterdeployment.k0rdent.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 ]]; do \
-			echo "Waiting untill all cluster deployments are deleted..."; \
+			echo "Waiting until all cluster deployments are deleted..."; \
 			sleep 3; \
 		done; \
 	fi
@@ -812,13 +837,6 @@ cleanup: ## Tear down the cluster and cleanup resources
 		fi; \
 	else \
 		echo "Non-kind cluster detected. Cleaning up."; \
-		if $(KUBECTL) get clusterdeployments -n $$NAMESPACE > /dev/null 2>&1; then \
-			echo "Deleting all ClusterDeployments in namespace $$NAMESPACE"; \
-			$(KUBECTL) get clusterdeployments -n $$NAMESPACE -o name | \
-			while read -r resource; do \
-				$(KUBECTL) -n $$NAMESPACE delete $$resource; \
-			done; \
-		fi; \
 		for NAMESPACE in k0rdent projectsveltos mgmt; do \
 			if $(KUBECTL) get namespace $$NAMESPACE > /dev/null 2>&1; then \
 				for release in $$($(KUBECTL) -n $$NAMESPACE get helmreleases -o name | awk -F'/' '{print $$2}'); do \
