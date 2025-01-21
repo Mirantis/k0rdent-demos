@@ -334,9 +334,9 @@ get-creds-azure: creds_name = azure-cluster-identity-cred
 get-creds-azure: ## Get Azure credentials info	
 
 # OpensStack
-.%-openstack-access-key: var_name = OS_APP_CRED_ID
+.%-openstack-access-key: var_name = OS_APPLICATION_CREDENTIAL_ID
 .%-openstack-access-key: var_description = OpenStack application credential key
-.%-openstack-secret-access-key: var_name = OS_APP_CRED_SECRET
+.%-openstack-secret-access-key: var_name = OS_APPLICATION_CREDENTIAL_SECRET
 .%-openstack-secret-access-key: var_description = OpenStack application credential secret	
 .%-openstack-access-url: var_name = OS_AUTH_URL
 .%-openstack-access-url: var_description = OpenStack auth url	
@@ -641,7 +641,7 @@ generate-platform-engineer1-kubeconfig: ## Create Platform Engineer user that ha
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: cluster_template_chain_name = demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.1 into the target namespace
 
-approve-clustertemplatechain-azure-standalone-cp-0.0.1: cluster_template_chain_name = demo-zzure-standalone-cp-0.0.1
+approve-clustertemplatechain-azure-standalone-cp-0.0.1: cluster_template_chain_name = demo-azure-standalone-cp-0.0.1
 approve-clustertemplatechain-azure-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-azure-standalone-cp-0.0.1 into the target namespace
 
 approve-clustertemplatechain-openstack-standalone-cp-0.0.1: cluster_template_chain_name = demo-openstack-standalone-cp-0.0.1

@@ -202,8 +202,8 @@ This assumes that you already have configured an Application Credential in OpenS
 
 1. Export Application Credential as environment variables:
     ```shell
-    export OS_APP_CRED_ID="OpenStack application credential key"
-    export OS_APP_CRED_SECRET="OpenStack application credential secret"
+    export OS_APPLICATION_CREDENTIAL_ID="OpenStack application credential key"
+    export OS_APPLICATION_CREDENTIAL_SECRET="OpenStack application credential secret"
     export OS_AUTH_URL="OpenStack auth url"
     ````
 2. Install Credentials into k0rdent:
