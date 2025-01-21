@@ -619,8 +619,6 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 > Expected completion time ~2 min
 
-> Note: Currently not working correctly for OpenStack.
-
 1. Approve the clustertemplate into the blue namespace
     ```shell
     make approve-clustertemplatechain-aws-standalone-cp-0.0.1
@@ -688,6 +686,8 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 ## Demo 6: Use approved ClusterTemplate in separate Namespace
 
 > Expected completion time ~10-15 min
+
+> Note: Currently not working correctly for OpenStack.
 
 1. Create Cluster in blue namespace (this will be ran as platform engineer)
     ```shell
