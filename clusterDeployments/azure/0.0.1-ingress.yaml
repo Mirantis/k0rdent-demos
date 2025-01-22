@@ -20,3 +20,8 @@ spec:
     clusterIdentity:
       name: azure-cluster-identity
       namespace: k0rdent
+  serviceSpec:
+    services:
+      - template: demo-ingress-nginx-4.11.0
+        name: ingress-nginx
+        namespace: ingress-nginx      

@@ -16,6 +16,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
    1. [Infrastructure setup](#infra-setup)
       1. [AWS setup](#aws-setup)
       1. [Azure setup](#azure-setup)
+      1. [OpenStack setup](#openstack-setup)
 1. [Demo 1: Standalone Cluster Deployment](#demo-1-standalone-cluster-deployment)
 1. [Demo 2: Single Standalone Cluster Upgrade](#demo-2-single-standalone-cluster-upgrade)
 1. [Demo 3: Install ServiceTemplate into single cluster](#demo-3-install-servicetemplate-into-single-cluster)
@@ -73,6 +74,8 @@ To get the full list of commands run `make help`.
     
     For detailed explanation, please refer to the [documentation](./documentation/1-general-setup-bootstrap-kind-cluster.md).
 
+    > N.B. You can skip this step if you wish to deploy to an existing cluster. Just make sure the relevant kubeconfig is already set, e.g. by exporting it as an environment variable.
+
 2. Install k0rdent into kind cluster:
     ```shell
     make deploy-k0rdent
@@ -123,6 +126,7 @@ As next you need to decide into which infrastructure you would like to install t
 
 - AWS
 - Azure
+- OpenStack
 
 #### AWS Setup
 
@@ -188,6 +192,33 @@ This assumes that you already have configured the required [Azure providers](htt
     ```
     NAME                          READY   DESCRIPTION
     azure-cluster-identity-cred   true    Azure credentials
+    ```
+
+#### OpenStack Setup
+
+> Expected completion time ~2 min
+
+This assumes that you already have configured an Application Credential in OpenStack, the flavor "m1.medium" exists, and an image called "ubuntu-22.04" is present.
+
+1. Export Application Credential as environment variables:
+    ```shell
+    export OS_APPLICATION_CREDENTIAL_ID="OpenStack application credential key"
+    export OS_APPLICATION_CREDENTIAL_SECRET="OpenStack application credential secret"
+    export OS_AUTH_URL="OpenStack auth url"
+    ````
+2. Install Credentials into k0rdent:
+    ```shell
+    make apply-openstack-creds
+    ```
+
+3. Check that credentials are ready to use
+    ```shell
+    make get-creds-openstack
+    ```
+    The output should be similar to:
+    ```
+    NAME                              READY   DESCRIPTION
+    openstack-cluster-identity-cred   true    OpenStack credentials
     ```
 
 ### Demo Cluster Setup
@@ -331,6 +362,8 @@ In the real world this would most probably be done by a Platform Team Lead that 
 
 > Expected completion time ~10 min
 
+> Note: Currently not working correctly for OpenStack.
+
 This demo shows how to upgrade an existing cluster through the cluster template system. This expects [Demo 1](#demo-1-standalone-cluster-deployment) to be completed or the `aws-test1` cluster already created during the [Demo Setup](#demo-cluster-setup).
 
 This demo will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo-aws-standalone-cp-0.0.1` template) to `v1.31.3+k0s.0` (which is part of `demo-aws-standalone-cp-0.0.2`)
@@ -464,6 +497,8 @@ In order to run this demo you need [`Demo 1`](#demo-1-standalone-cluster-deploym
 ## Demo 4: Install ServiceTemplate into multiple clusters
 
 > Expected completion time ~5 min
+
+> Note: Currently not working correctly for OpenStack.
 
 This Demo shows the capability of k0rdent to install a ServiceTemplate into multiple Clusters without the need to reference it in every cluster as we did in `Demo 3`.
 
@@ -651,6 +686,8 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 ## Demo 6: Use approved ClusterTemplate in separate Namespace
 
 > Expected completion time ~10-15 min
+
+> Note: Currently not working correctly for OpenStack.
 
 1. Create Cluster in blue namespace (this will be ran as platform engineer)
     ```shell

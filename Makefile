@@ -15,9 +15,18 @@ TARGET_NAMESPACE ?= blue
 KIND_CLUSTER_NAME ?= k0rdent-management-local
 KIND_KUBECTL_CONTEXT = kind-$(KIND_CLUSTER_NAME)
 
-OPENSSL_DOCKER_IMAGE ?= alpine/openssl:3.3.2
+OPENSSL_DOCKER_IMAGE ?= debian:bookworm-slim
 
 AWS_REGION ?= us-west-2
+
+CRD_DELETION_LIST = \
+    helmcharts.source.toolkit.fluxcd.io \
+    helmreleases.helm.toolkit.fluxcd.io \
+    infrastructureproviders.operator.cluster.x-k8s.io \
+    bootstrapproviders.operator.cluster.x-k8s.io \
+    controlplaneproviders.operator.cluster.x-k8s.io \
+    provider.cluster.x-k8s.io \
+    coreproviders.operator.cluster.x-k8s.io \
 
 ##@ General
 
@@ -57,18 +66,20 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-KIND ?= PATH=$(LOCALBIN):$(PATH) kind
+KIND ?= PATH="$(LOCALBIN):$(PATH)" kind
 KIND_VERSION ?= 0.25.0
 
-HELM ?= PATH=$(LOCALBIN):$(PATH) helm
+HELM ?= PATH="$(LOCALBIN):$(PATH)" helm
 HELM_VERSION ?= v3.15.1
 
-YQ ?= PATH=$(LOCALBIN):$(PATH) yq
+YQ ?= PATH="$(LOCALBIN):$(PATH)" yq
 YQ_VERSION ?= v4.44.6
 
-KUBECTL ?= PATH=$(LOCALBIN):$(PATH) kubectl
+KUBECTL ?= PATH="$(LOCALBIN):$(PATH)" kubectl
 
 DOCKER_VERSION ?= 27.4.1
+
+XARGS ?= PATH="$(LOCALBIN):$(PATH)" xargs
 
 # installs binary locally
 $(LOCALBIN)/%: $(LOCALBIN)
@@ -99,10 +110,17 @@ $(LOCALBIN)/%: $(LOCALBIN)
 %kind: binary = kind
 %kind: url = "https://kind.sigs.k8s.io/dl/v$(KIND_VERSION)/kind-$(OS)-$(ARCH)"
 %kubectl: binary = kubectl
-%kubectl: url = "https://dl.k8s.io/release/$(shell curl -L -s https://dl.k8s.io/release/stable.txt)/bin/$(OS)/$(ARCH)/kubectl"
 %helm: binary = helm
 %yq: binary = yq
 %yq: url = "https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)"
+
+.PHONY: kubectl
+kubectl: $(LOCALBIN)/kubectl ## Install kubectl binary locally if necessary
+$(LOCALBIN)/kubectl: | $(LOCALBIN)
+	@echo "Downloading kubectl..."
+	@curl -sLo $(LOCALBIN)/kubectl https://dl.k8s.io/release/$(shell curl -L -s https://dl.k8s.io/release/stable.txt)/bin/$(OS)/$(ARCH)/kubectl
+	@sudo install -o root -g root -m 0755 $(LOCALBIN)/kubectl /usr/local/bin/kubectl
+	@echo "kubectl installed successfully."
 
 .PHONY: kind
 kind: $(LOCALBIN)/kind ## Install kind binary locally if necessary
@@ -112,7 +130,7 @@ helm: $(LOCALBIN)/helm ## Install helm binary locally if necessary
 HELM_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3"
 $(LOCALBIN)/helm: | $(LOCALBIN)
 	rm -f $(LOCALBIN)/helm-*
-	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=false HELM_INSTALL_DIR=$(LOCALBIN) DESIRED_VERSION=$(HELM_VERSION) BINARY_NAME=helm PATH="$(LOCALBIN):$(PATH)" bash
+	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=true bash
 
 
 ##@ General Setup
@@ -123,7 +141,7 @@ $(KIND_CLUSTER_CONFIG_PATH): $(LOCALBIN)
 	@cat setup/kind-cluster.yaml | envsubst > $(KIND_CLUSTER_CONFIG_PATH)
 
 .PHONY: bootstrap-kind-cluster
-bootstrap-kind-cluster: .check-binary-docker .check-binary-kind .check-binary-kubectl
+bootstrap-kind-cluster: .check-binary-docker .check-binary-kind .check-binary-kubectl check-kind-network
 bootstrap-kind-cluster: ## Provision local kind cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then\
 		echo "$(KIND_CLUSTER_NAME) kind cluster already installed";\
@@ -134,15 +152,71 @@ bootstrap-kind-cluster: ## Provision local kind cluster
 	fi
 	@$(KUBECTL) config use-context $(KIND_KUBECTL_CONTEXT)
 
+.PHONY: check-kind-network
+check-kind-network: ## Ensure the Docker network kind is configured correctly
+	@if docker network inspect kind >/dev/null 2>&1; then \
+		NETWORK_SUBNET=$$(docker network inspect kind --format '{{(index .IPAM.Config 0).Subnet}}'); \
+		if [ "$${NETWORK_SUBNET}" = "172.18.0.0/16" ]; then \
+			echo "Kind network has subnet 172.18.0.0/16, recreating..."; \
+			docker network rm kind; \
+			docker network create kind --subnet=10.24.0.0/16; \
+		else \
+			echo "Kind network is already configured correctly."; \
+		fi; \
+	else \
+		echo "Kind network not found, creating..."; \
+		docker network create kind --subnet=10.24.0.0/16; \
+	fi	
+
 # Deploy k0rdent operator
 .PHONY: deploy-k0rdent
 deploy-k0rdent: .check-binary-helm ## Deploy k0rdent to the management cluster
-	$(HELM) install kcm $(KCM_REPO) --version $(KCM_VERSION) -n $(KCM_NAMESPACE) --create-namespace
+	@set -o pipefail; \
+	helm_set_args=""; \
+	for attempt in 1 2 3; do \
+	  echo "Helm install attempt #$${attempt} with extra args: $${helm_set_args}"; \
+	  echo "Running Helm command:"; \
+	  echo "$(HELM) install kcm $(KCM_REPO) --version $(KCM_VERSION) -n $(KCM_NAMESPACE) --create-namespace $${helm_set_args}"; \
+	  OUT="$$( \
+	    PATH="$(LOCALBIN):$${PATH}" \
+	    $(HELM) install kcm $(KCM_REPO) --version $(KCM_VERSION) \
+	      -n $(KCM_NAMESPACE) --create-namespace $${helm_set_args} 2>&1 \
+	  )"; \
+	  RET="$$?"; \
+	  echo "$$OUT"; \
+	  if [ "$$RET" -eq 0 ]; then \
+	    echo "Helm install succeeded!"; \
+	    break; \
+	  fi; \
+	  echo "Helm install failed. Checking for specific errors..."; \
+	  if echo "$$OUT" | grep -q "cert-manager"; then \
+	    if ! echo "$${helm_set_args}" | grep -q "cert-manager.enabled=false"; then \
+	      echo "Detected cert-manager conflict. Disabling cert-manager and retrying..."; \
+	      helm_set_args="$${helm_set_args} --set cert-manager.enabled=false"; \
+	      continue; \
+	    fi; \
+	  fi; \
+	  if echo "$$OUT" | grep -q "fluxcd"; then \
+	    if ! echo "$${helm_set_args}" | grep -q "flux2.enabled=false"; then \
+	      echo "Detected fluxcd conflict. Disabling fluxcd and retrying..."; \
+	      helm_set_args="$${helm_set_args} --set flux2.enabled=false"; \
+	      continue; \
+	    fi; \
+	  fi; \
+	  echo "Invalid ownership metadata error, but not fixable by disabling cert-manager or flux2."; \
+	  exit 1; \
+	done; \
+	if [ "$$RET" -ne 0 ]; then \
+	  echo "ERROR: Helm install failed after multiple attempts."; \
+	  exit 1; \
+	fi
 
 .PHONY: watch-k0rdent-deployment
 watch-k0rdent-deployment: .check-binary-kubectl
 watch-k0rdent-deployment: ## Monitor k0rdent deployment
 	@while true; do\
+                echo "Checking if management object exists..."; \
+                $(KUBECTL) get management $(KCM_MANAGEMENT_OBJECT_NAME); \
 		if $(KUBECTL) get management $(KCM_MANAGEMENT_OBJECT_NAME) > /dev/null 2>&1; then \
 				echo "Status of the k0rdent components installation: "; \
 				$(KUBECTL) get management $(KCM_MANAGEMENT_OBJECT_NAME) -o go-template='{{range $$key, $$value := .status.components}}{{$$key}}: {{if $$value.success}}{{$$value.success}}{{else}}{{$$value.error}}{{end}}{{"\n"}}{{end}}'; \
@@ -155,7 +229,7 @@ watch-k0rdent-deployment: ## Monitor k0rdent deployment
 
 # Setup Helm registry and push charts with custom Cluster and Service templates
 TEMPLATES_DIR := templates
-TEAMPLATES = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
+TEMPLATES = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts
 $(CHARTS_PACKAGE_DIR): | $(LOCALBIN)
@@ -164,7 +238,6 @@ $(CHARTS_PACKAGE_DIR): | $(LOCALBIN)
 
 HELM_REGISTRY_INTERNAL_PORT ?= 5000
 HELM_REGISTRY_EXTERNAL_PORT ?= 30500
-REGISTRY_REPO ?= oci://127.0.0.1:$(HELM_REGISTRY_EXTERNAL_PORT)/helm-charts
 
 .PHONY: helm-package
 helm-package: $(CHARTS_PACKAGE_DIR) .check-binary-helm
@@ -182,13 +255,32 @@ package-chart-%: lint-chart-%
 
 .PHONY: helm-push
 helm-push: helm-package
-	@for chart in $(CHARTS_PACKAGE_DIR)/*.tgz; do \
-		$(HELM) push "$$chart" $(REGISTRY_REPO); \
-	done
+	@set -e; \
+	HELM_REGISTRY_EXTERNAL_PORT=$$($(KUBECTL) -n $(KCM_NAMESPACE) get svc helm-registry -o jsonpath='{.spec.ports[0].nodePort}'); \
+	echo "Using Helm Registry External Port: $$HELM_REGISTRY_EXTERNAL_PORT"; \
+	echo "Starting port-forward for helm-registry..."; \
+	$(KUBECTL) port-forward -n $(KCM_NAMESPACE) svc/helm-registry $$HELM_REGISTRY_EXTERNAL_PORT:$(HELM_REGISTRY_INTERNAL_PORT) > /dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID" EXIT; \
+	echo "Port-forward started with PID $$PF_PID"; \
+	sleep 3; \
+	for chart in $(CHARTS_PACKAGE_DIR)/*.tgz; do \
+		$(HELM) push "$$chart" oci://127.0.0.1:$$HELM_REGISTRY_EXTERNAL_PORT/helm-charts; \
+	done; \
+	echo "Killing port-forward process..."; \
+	kill $$PF_PID
 
 apply-helmrepo: SHOW_DIFF = false
 apply-helmrepo: template_path = setup/helmRepository.yaml
 apply-helmrepo: ## Deploy local helm repository and register it in k0rdent
+	@set -e; \
+	echo "Applying Helm repository..."; \
+	if ! envsubst < $(template_path) | $(KUBECTL) apply -f - 2>&1 | tee /tmp/apply-helmrepo.log | grep -q "spec.ports\[0\].nodePort: Invalid value"; then \
+		echo "Helm repository applied successfully."; \
+	else \
+		echo "Error: NodePort value is invalid. Updating HELM_REGISTRY_EXTERNAL_PORT and retrying..."; \
+		HELM_REGISTRY_EXTERNAL_PORT=32768 make apply-helmrepo; \
+	fi
 
 .PHONY: push-helm-charts
 push-helm-charts: .check-binary-kubectl
@@ -239,7 +331,23 @@ apply-azure-creds: .check-variable-azure-sp-password .check-variable-azure-sp-ap
 apply-azure-creds: ## Setup Azure credentials
 
 get-creds-azure: creds_name = azure-cluster-identity-cred
-get-creds-azure: ## Get Azure credentials info
+get-creds-azure: ## Get Azure credentials info	
+
+# OpensStack
+.%-openstack-access-key: var_name = OS_APPLICATION_CREDENTIAL_ID
+.%-openstack-access-key: var_description = OpenStack application credential key
+.%-openstack-secret-access-key: var_name = OS_APPLICATION_CREDENTIAL_SECRET
+.%-openstack-secret-access-key: var_description = OpenStack application credential secret	
+.%-openstack-access-url: var_name = OS_AUTH_URL
+.%-openstack-access-url: var_description = OpenStack auth url	
+
+apply-openstack-creds: SHOW_DIFF = false
+apply-openstack-creds: template_path = setup/openstack-credentials.yaml
+apply-openstack-creds: .check-variable-openstack-access-key .check-variable-openstack-secret-access-key .check-variable-openstack-access-url
+apply-openstack-creds: ## Setup OpenStack credentials
+
+get-creds-openstack: creds_name = openstack-cluster-identity-cred
+get-creds-openstacks: ## Get OpenStack credentials info	
 
 ## Common targets and functions
 UNIQUE_SUFFIX = $(patsubst %,-%,$(USERNAME))
@@ -269,7 +377,7 @@ $(KUBECONFIGS_DIR):
 
 get-kubeconfig-%: NAMESPACE = $(TESTING_NAMESPACE)
 get-kubeconfig-%: .check-binary-kubectl
-	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-aws-$(CLUSTERNAME).kubeconfig
+	@$(KUBECTL) -n $(NAMESPACE) get secret $(FULL_CLUSTER_NAME)-kubeconfig -o jsonpath='{.data.value}' | base64 -d > $(KUBECONFIGS_DIR)/$(NAMESPACE)-$(PROVIDER)-$(CLUSTERNAME).kubeconfig
 
 # COMMAND is the yq expression that will be applied to the existing AccessManagement object
 # If the command that implements this template has any credential_name, cluster_template_chain_name or service_template_chain_name variables, it will be added to the AccessManagement object:
@@ -297,6 +405,10 @@ apply-clustertemplate-demo-azure-standalone-cp-0.0.1: SHOW_DIFF = false
 apply-clustertemplate-demo-azure-standalone-cp-0.0.1: template_path = templates/cluster/demo-azure-standalone-cp-0.0.1.yaml
 apply-clustertemplate-demo-azure-standalone-cp-0.0.1: ## Deploy custom demo-azure-standalone-cp-0.0.1 ClusterTemplate
 
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: SHOW_DIFF = false
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: template_path = templates/cluster/demo-openstack-standalone-cp-0.0.1.yaml
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.1: ## Deploy custom demo-openstack-standalone-cp-0.0.1 ClusterTemplate	
+
 apply-cluster-deployment-aws-test1-0.0.1: CLUSTERNAME = test1
 apply-cluster-deployment-aws-test1-0.0.1: template_path = clusterDeployments/aws/0.0.1.yaml
 apply-cluster-deployment-aws-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to AWS
@@ -306,6 +418,10 @@ apply-cluster-deployment-azure-test1-0.0.1: template_path = clusterDeployments/a
 apply-cluster-deployment-azure-test1-0.0.1: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to Azure
 
+apply-cluster-deployment-openstack-test1-0.0.1: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-0.0.1: template_path = clusterDeployments/openstack/1-0.0.1.yaml
+apply-cluster-deployment-openstack-test1-0.0.1: ## Deploy cluster deployment test1 version 0.0.1 to OpenStack	
+
 watch-aws-test1: CLUSTERNAME = test1
 watch-aws-test1: PROVIDER = aws
 watch-aws-test1: ## Monitor the provisioning process of the cluster deployment test1 in AWS
@@ -314,9 +430,21 @@ watch-azure-test1: CLUSTERNAME = test1
 watch-azure-test1: PROVIDER = azure
 watch-azure-test1: ## Monitor the provisioning process of the cluster deployment test1 in Azure
 
+watch-openstack-test1: CLUSTERNAME = test1
+watch-openstack-test1: PROVIDER = openstack
+watch-openstack-test1: ## Monitor the provisioning process of the cluster deployment test1 in OpenStack
+
 get-kubeconfig-aws-test1: CLUSTERNAME = test1
 get-kubeconfig-aws-test1: PROVIDER = aws
 get-kubeconfig-aws-test1: ## Get kubeconfig for the cluster test1
+
+get-kubeconfig-azure-test1: CLUSTERNAME = test1
+get-kubeconfig-azure-test1: PROVIDER = azure
+get-kubeconfig-azure-test1: ## Get kubeconfig for the cluster test1	
+
+get-kubeconfig-openstack-test1: CLUSTERNAME = test1
+get-kubeconfig-openstack-test1: PROVIDER = openstack
+get-kubeconfig-openstack-test1: ## Get kubeconfig for the cluster test1		
 
 apply-cluster-deployment-aws-test2-0.0.1: CLUSTERNAME = test2
 apply-cluster-deployment-aws-test2-0.0.1: template_path = clusterDeployments/aws/0.0.1.yaml
@@ -324,8 +452,12 @@ apply-cluster-deployment-aws-test2-0.0.1: ## Deploy cluster deployment test2 ver
 
 apply-cluster-deployment-azure-test2-0.0.1: CLUSTERNAME = test2
 apply-cluster-deployment-azure-test2-0.0.1: template_path = clusterDeployments/azure/1-0.0.1.yaml
-apply-cluster-deployment-azure-test2-0.0.2: .check-variable-azure-sp-subscription-id
+apply-cluster-deployment-azure-test2-0.0.1: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test2-0.0.1: ## Deploy cluster deployment test2 version 0.0.1 to Azure
+
+apply-cluster-deployment-openstack-test2-0.0.1: CLUSTERNAME = test2
+apply-cluster-deployment-openstack-test2-0.0.1: template_path = clusterDeployments/openstack/1-0.0.1.yaml
+apply-cluster-deployment-openstack-test2-0.0.1: ## Deploy cluster deployment test2 version 0.0.1 to OpenStack	
 
 watch-aws-test2: CLUSTERNAME = test2
 watch-aws-test2: PROVIDER = aws
@@ -335,9 +467,21 @@ watch-azure-test2: CLUSTERNAME = test2
 watch-azure-test2: PROVIDER = azure
 watch-azure-test2: ## Monitor the provisioning process of the cluster deployment test2 in Azure
 
+watch-openstack-test2: CLUSTERNAME = test2
+watch-openstack-test2: PROVIDER = openstack
+watch-openstack-test2: ## Monitor the provisioning process of the cluster deployment test2 in OpenStack	
+
 get-kubeconfig-aws-test2: CLUSTERNAME = test2
 get-kubeconfig-aws-test2: PROVIDER = aws
 get-kubeconfig-aws-test2: ## Get kubeconfig for the cluster test2
+
+get-kubeconfig-azure-test2: CLUSTERNAME = test2
+get-kubeconfig-azure-test2: PROVIDER = azure
+get-kubeconfig-azure-test2: ## Get kubeconfig for the cluster test1	
+
+get-kubeconfig-openstack-test2: CLUSTERNAME = test2
+get-kubeconfig-openstack-test2: PROVIDER = openstack
+get-kubeconfig-openstack-test2: ## Get kubeconfig for the cluster test1		
 
 ##@ Demo 2
 
@@ -348,6 +492,10 @@ apply-clustertemplate-demo-aws-standalone-cp-0.0.2: ## Deploy custom demo-aws-st
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: SHOW_DIFF = false
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: template_path = templates/cluster/demo-azure-standalone-cp-0.0.2.yaml
 apply-clustertemplate-demo-azure-standalone-cp-0.0.2: ## Deploy custom demo-azure-standalone-cp-0.0.2 ClusterTemplate
+
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: SHOW_DIFF = false
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: template_path = templates/cluster/demo-openstack-standalone-cp-0.0.2.yaml
+apply-clustertemplate-demo-openstack-standalone-cp-0.0.2: ## Deploy custom demo-openstack-standalone-cp-0.0.2 ClusterTemplate	
 
 get-available-upgrades-k0rdent: NAMESPACE = $(TESTING_NAMESPACE)
 get-available-upgrades-k0rdent: ## Get available upgrades for all cluster deployments
@@ -361,6 +509,10 @@ apply-cluster-deployment-azure-test1-0.0.2: template_path = clusterDeployments/a
 apply-cluster-deployment-azure-test1-0.0.2: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2
 
+apply-cluster-deployment-openstack-test1-0.0.2: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
+apply-cluster-deployment-openstack-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2	
+
 ##@ Demo 3
 
 apply-servicetemplate-demo-ingress-nginx-4.11.0: SHOW_DIFF = false
@@ -373,17 +525,53 @@ apply-cluster-deployment-aws-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo
 apply-cluster-deployment-aws-test1-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in AWS
 
+apply-cluster-deployment-azure-test1-ingress: CLUSTERNAME = test1
+apply-cluster-deployment-azure-test1-ingress: PROVIDER = azure
+apply-cluster-deployment-azure-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-azure-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-azure-test1-ingress: template_path = clusterDeployments/azure/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-azure-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in Azure
+
+apply-cluster-deployment-openstack-test1-ingress: CLUSTERNAME = test1
+apply-cluster-deployment-openstack-test1-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-test1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-test1-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-test1-ingress: ## Deploy ingress service to the cluster deployment test1 in OpenStack	
+
 apply-cluster-deployment-aws-test2-ingress: CLUSTERNAME = test2
 apply-cluster-deployment-aws-test2-ingress: PROVIDER = aws
 apply-cluster-deployment-aws-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-aws-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
 apply-cluster-deployment-aws-test2-ingress: template_path = clusterDeployments/aws/$(DEPLOYMENT_VERSION)-ingress.yaml
 apply-cluster-deployment-aws-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in AWS
 
+apply-cluster-deployment-azure-test2-ingress: CLUSTERNAME = test2
+apply-cluster-deployment-azure-test2-ingress: PROVIDER = azure
+apply-cluster-deployment-azure-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-azure-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-azure-test2-ingress: template_path = clusterDeployments/azure/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-azure-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in Azure
+
+apply-cluster-deployment-openstack-test2-ingress: CLUSTERNAME = test2
+apply-cluster-deployment-openstack-test2-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-test2-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-test2-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-test2-ingress: ## Deploy ingress service to the cluster deployment test2 in OpenStack	
+
 get-yaml-clusterdeployment-aws-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-test2: CLUSTERNAME = test2
 get-yaml-clusterdeployment-aws-test2: PROVIDER = aws
 get-yaml-clusterdeployment-aws-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-test2: ## Get test2 ClusterDeployment object in yaml format
+
+get-yaml-clusterdeployment-azure-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-azure-test2: CLUSTERNAME = test2
+get-yaml-clusterdeployment-azure-test2: PROVIDER = azure
+get-yaml-clusterdeployment-azure-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-azure-test2: ## Get test2 ClusterDeployment object in yaml format
+
+get-yaml-clusterdeployment-openstack-test2: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-openstack-test2: CLUSTERNAME = test2
+get-yaml-clusterdeployment-openstack-test2: PROVIDER = openstack
+get-yaml-clusterdeployment-openstack-test2: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-openstack-test2: ## Get test2 ClusterDeployment object in yaml format	
 
 ##@ Demo 4
 
@@ -403,6 +591,7 @@ get-yaml-milticlasterservice-global-kyverno: ## Get global-kyverno MultiClusterS
 CERTS_DIR = $(shell pwd)/certs
 CERTS_CA_DIR = $(CERTS_DIR)/ca
 $(CERTS_CA_DIR):
+	@echo "Creating CA directory: $(CERTS_CA_DIR)"
 	@mkdir -p $(CERTS_CA_DIR)
 
 $(CERTS_CA_DIR)/ca.crt: $(CERTS_CA_DIR)
@@ -412,17 +601,24 @@ $(CERTS_CA_DIR)/ca.key: $(CERTS_CA_DIR)
 	@docker cp $(KIND_CLUSTER_NAME)-control-plane:/etc/kubernetes/pki/ca.key $@
 
 PLATFORM_ENGINEER_CERTS_DIR = $(CERTS_DIR)/platform-engineer1
+
 $(PLATFORM_ENGINEER_CERTS_DIR):
+	@echo "Creating platform engineer directory: $(PLATFORM_ENGINEER_CERTS_DIR)"
 	@mkdir -p $(PLATFORM_ENGINEER_CERTS_DIR)
 
 $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.key: $(PLATFORM_ENGINEER_CERTS_DIR)
-	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) genrsa -out /certs/platform-engineer1/platform-engineer1.key 2048
+	@docker run --rm -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) bash -c \
+		"apt-get update && apt-get install -y openssl && mkdir -p /certs/platform-engineer1 && openssl genrsa -out /certs/platform-engineer1/platform-engineer1.key 2048"
 
 $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr: $(PLATFORM_ENGINEER_CERTS_DIR) $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.key
-	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) req -new -key /certs/platform-engineer1/platform-engineer1.key -out /certs/platform-engineer1/platform-engineer1.csr -subj '/CN=platform-engineer1/O=$(TARGET_NAMESPACE)'
+	@docker run --rm -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) bash -c \
+		"apt-get update && apt-get install -y openssl && \
+		openssl req -new -key /certs/platform-engineer1/platform-engineer1.key -out /certs/platform-engineer1/platform-engineer1.csr -subj '/CN=platform-engineer1/O=$(TARGET_NAMESPACE)'"
 
 $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.crt: $(PLATFORM_ENGINEER_CERTS_DIR) $(PLATFORM_ENGINEER_CERTS_DIR)/platform-engineer1.csr $(CERTS_CA_DIR)/ca.crt $(CERTS_CA_DIR)/ca.key
-	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360
+	@docker run -v $(CERTS_DIR):/certs $(OPENSSL_DOCKER_IMAGE) bash -c \
+		"apt-get update && apt-get install -y openssl && \
+		openssl x509 -req -in /certs/platform-engineer1/platform-engineer1.csr -CA /certs/ca/ca.crt -CAkey /certs/ca/ca.key -CAcreateserial -out /certs/platform-engineer1/platform-engineer1.crt -days 360"
 
 .PHONY: create-target-namespace-rolebindings
 create-target-namespace-rolebindings: .check-binary-kubectl
@@ -445,8 +641,20 @@ generate-platform-engineer1-kubeconfig: ## Create Platform Engineer user that ha
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: cluster_template_chain_name = demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.1 into the target namespace
 
+approve-clustertemplatechain-azure-standalone-cp-0.0.1: cluster_template_chain_name = demo-azure-standalone-cp-0.0.1
+approve-clustertemplatechain-azure-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-azure-standalone-cp-0.0.1 into the target namespace
+
+approve-clustertemplatechain-openstack-standalone-cp-0.0.1: cluster_template_chain_name = demo-openstack-standalone-cp-0.0.1
+approve-clustertemplatechain-openstack-standalone-cp-0.0.1: ## Approve ClusterTemplate demo-openstack-standalone-cp-0.0.1 into the target namespace	
+
 approve-credential-aws: credential_name = aws-cluster-identity-cred
 approve-credential-aws: ## Approve AWS Credentials into the target namespace
+
+approve-credential-azure: credential_name = azure-cluster-identity-cred
+approve-credential-azure: ## Approve Azure Credentials into the target namespace
+
+approve-credential-openstack: credential_name = openstack-cluster-identity-cred
+approve-credential-openstack: ## Approve OpenStack Credentials into the target namespace	
 
 get-yaml-accessmanagement: TYPE = accessmanagement.k0rdent.mirantis.com
 get-yaml-accessmanagement: OBJECT_NAME = $(KCM_MANAGEMENT_OBJECT_NAME)
@@ -460,11 +668,35 @@ apply-cluster-deployment-aws-dev1-0.0.1: NAMESPACE = $(TARGET_NAMESPACE)
 apply-cluster-deployment-aws-dev1-0.0.1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-0.0.1: ## Deploy cluster deployment AWS dev1 version 0.0.1 to the blue namespace as Platform Engineer
 
+apply-cluster-deployment-azure-dev1-0.0.1: CLUSTERNAME = dev1
+apply-cluster-deployment-azure-dev1-0.0.1: template_path = clusterDeployments/azure/0.0.1.yaml
+apply-cluster-deployment-azure-dev1-0.0.1: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-azure-dev1-0.0.1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-azure-dev1-0.0.1: ## Deploy cluster deployment Azure dev1 version 0.0.1 to the blue namespace as Platform Engineer	
+
+apply-cluster-deployment-openstack-dev1-0.0.1: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-0.0.1: template_path = clusterDeployments/openstack/0.0.1.yaml
+apply-cluster-deployment-openstack-dev1-0.0.1: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-0.0.1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-0.0.1: ## Deploy cluster deployment OpenStack dev1 version 0.0.1 to the blue namespace as Platform Engineer		
+
 watch-aws-dev1: CLUSTERNAME = dev1
 watch-aws-dev1: PROVIDER = aws
 watch-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
 watch-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 watch-aws-dev1: ## Monitor the provisioning process of the AWS cluster deployment dev1 in blue namespace
+
+watch-azure-dev1: CLUSTERNAME = dev1
+watch-azure-dev1: PROVIDER = azure
+watch-azure-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+watch-azure-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+watch-azure-dev1: ## Monitor the provisioning process of the Azure cluster deployment dev1 in blue namespace
+
+watch-openstack-dev1: CLUSTERNAME = dev1
+watch-openstack-dev1: PROVIDER = openstack
+watch-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+watch-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+watch-openstack-dev1: ## Monitor the provisioning process of the OpenStack cluster deployment dev1 in blue namespace	
 
 get-kubeconfig-aws-dev1: CLUSTERNAME = dev1
 get-kubeconfig-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
@@ -472,10 +704,28 @@ get-kubeconfig-aws-dev1: PROVIDER = aws
 get-kubeconfig-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 get-kubeconfig-aws-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace
 
+get-kubeconfig-azure-dev1: CLUSTERNAME = dev1
+get-kubeconfig-azure-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-kubeconfig-azure-dev1: PROVIDER = azure
+get-kubeconfig-azure-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-kubeconfig-azure-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace	
+
+get-kubeconfig-openstack-dev1: CLUSTERNAME = dev1
+get-kubeconfig-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-kubeconfig-openstack-dev1: PROVIDER = openstack
+get-kubeconfig-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-kubeconfig-openstack-dev1: ## Get kubeconfig for the cluster dev1 in the blue namespace	
+
 ##@ Demo 7
 
 approve-clustertemplatechain-aws-standalone-cp-0.0.2: cluster_template_chain_name = demo-aws-standalone-cp-0.0.2 demo-aws-standalone-cp-0.0.1
 approve-clustertemplatechain-aws-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-aws-standalone-cp-0.0.2 into the target namespace
+
+approve-clustertemplatechain-azure-standalone-cp-0.0.2: cluster_template_chain_name = demo-azure-standalone-cp-0.0.2 demo-azure-standalone-cp-0.0.1
+approve-clustertemplatechain-azure-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-azure-standalone-cp-0.0.2 into the target namespace	
+
+approve-clustertemplatechain-openstack-standalone-cp-0.0.2: cluster_template_chain_name = demo-openstack-standalone-cp-0.0.2 demo-openstack-standalone-cp-0.0.1
+approve-clustertemplatechain-openstack-standalone-cp-0.0.2: ## Approve ClusterTemplate demo-openstack-standalone-cp-0.0.2 into the target namespace	
 
 ##@ Demo 8
 
@@ -487,6 +737,18 @@ apply-cluster-deployment-aws-dev1-0.0.2: template_path = clusterDeployments/aws/
 apply-cluster-deployment-aws-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
 apply-cluster-deployment-aws-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2
+
+apply-cluster-deployment-azure-dev1-0.0.2: CLUSTERNAME = dev1
+apply-cluster-deployment-azure-dev1-0.0.2: template_path = clusterDeployments/azure/0.0.2.yaml
+apply-cluster-deployment-azure-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-azure-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-azure-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2
+
+apply-cluster-deployment-openstack-dev1-0.0.2: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
+apply-cluster-deployment-openstack-dev1-0.0.2: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-0.0.2: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-0.0.2: ## Upgrade cluster deployment dev1 in the blue namespace to version 0.0.2	
 
 ##@ Demo 9
 
@@ -503,6 +765,22 @@ apply-cluster-deployment-aws-dev1-ingress: template_path = clusterDeployments/aw
 apply-cluster-deployment-aws-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 apply-cluster-deployment-aws-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace
 
+apply-cluster-deployment-azure-dev1-ingress: CLUSTERNAME = dev1
+apply-cluster-deployment-azure-dev1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-azure-dev1-ingress: PROVIDER = azure
+apply-cluster-deployment-azure-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-azure-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-azure-dev1-ingress: template_path = clusterDeployments/azure/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-azure-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-azure-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace	
+
+apply-cluster-deployment-openstack-dev1-ingress: CLUSTERNAME = dev1
+apply-cluster-deployment-openstack-dev1-ingress: NAMESPACE = $(TARGET_NAMESPACE)
+apply-cluster-deployment-openstack-dev1-ingress: PROVIDER = openstack
+apply-cluster-deployment-openstack-dev1-ingress: DEPLOYMENT_VERSION = $(patsubst demo-openstack-standalone-cp-%,%,$(shell $(KUBECTL) -n $(NAMESPACE) get clusterdeployment.k0rdent.mirantis.com $(FULL_CLUSTER_NAME) -o jsonpath='{.spec.template}'))
+apply-cluster-deployment-openstack-dev1-ingress: template_path = clusterDeployments/openstack/$(DEPLOYMENT_VERSION)-ingress.yaml
+apply-cluster-deployment-openstack-dev1-ingress: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+apply-cluster-deployment-openstack-dev1-ingress: ## Deploy ingress service to the AWS cluster deployment dev1 in the blue namespace	
+
 get-yaml-clusterdeployment-aws-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
 get-yaml-clusterdeployment-aws-dev1: CLUSTERNAME = dev1
 get-yaml-clusterdeployment-aws-dev1: PROVIDER = aws
@@ -510,6 +788,22 @@ get-yaml-clusterdeployment-aws-dev1: NAMESPACE = $(TARGET_NAMESPACE)
 get-yaml-clusterdeployment-aws-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
 get-yaml-clusterdeployment-aws-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
 get-yaml-clusterdeployment-aws-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format
+
+get-yaml-clusterdeployment-azure-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-azure-dev1: CLUSTERNAME = dev1
+get-yaml-clusterdeployment-azure-dev1: PROVIDER = azure
+get-yaml-clusterdeployment-azure-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-yaml-clusterdeployment-azure-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-azure-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-yaml-clusterdeployment-azure-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format	
+
+get-yaml-clusterdeployment-openstack-dev1: TYPE = clusterdeployment.k0rdent.mirantis.com
+get-yaml-clusterdeployment-openstack-dev1: CLUSTERNAME = dev1
+get-yaml-clusterdeployment-openstack-dev1: PROVIDER = openstack
+get-yaml-clusterdeployment-openstack-dev1: NAMESPACE = $(TARGET_NAMESPACE)
+get-yaml-clusterdeployment-openstack-dev1: OBJECT_NAME = $(FULL_CLUSTER_NAME)
+get-yaml-clusterdeployment-openstack-dev1: KUBECONFIG = certs/platform-engineer1/kubeconfig.yaml
+get-yaml-clusterdeployment-openstack-dev1: ## Get dev1 ClusterDeployment object from the blue namespace in yaml format		
 
 
 ##@ Cleanup
@@ -520,19 +814,72 @@ cleanup-clusters: ## Tear down managed cluster
 	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then \
 		$(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) delete clusterdeployment.k0rdent.mirantis.com --all -A --wait=false 2>/dev/null || true; \
 		while [[ $$($(KUBECTL) --context=$(KIND_KUBECTL_CONTEXT) get clusterdeployment.k0rdent.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 ]]; do \
-			echo "Waiting untill all cluster deployments are deleted..."; \
+			echo "Waiting until all cluster deployments are deleted..."; \
 			sleep 3; \
 		done; \
 	fi
 
 .PHONY: cleanup
 cleanup: cleanup-clusters clean-certs clean-configs
-cleanup: ## Tear down management cluster
-	@if $(KIND) get clusters | grep -q $(KIND_CLUSTER_NAME); then\
-		$(KIND) delete cluster --name=$(KIND_CLUSTER_NAME);\
-	else\
-		echo "Can't find kind cluster with the name $(KIND_CLUSTER_NAME)";\
-	fi
+cleanup: ## Tear down the cluster and cleanup resources
+	@if $(KUBECTL) config current-context | grep -q '^kind-'; then \
+		echo "Detected kind cluster: $(KIND_CLUSTER_NAME). Proceeding with kind cleanup."; \
+		if $(KIND) get clusters | grep -q "$(KIND_CLUSTER_NAME)"; then \
+			$(KUBECTL) --context="$(KIND_KUBECTL_CONTEXT)" delete clusterdeployment.k0rdent.mirantis.com --all -A --wait=false 2>/dev/null || true; \
+			retry=0; \
+			while [[ $$($(KUBECTL) --context="$(KIND_KUBECTL_CONTEXT)" get clusterdeployment.k0rdent.mirantis.com -A -o go-template='{{ len .items }}' 2>/dev/null || echo 0) > 0 && $$retry -lt 30 ]]; do \
+				echo "Waiting until all cluster deployments are deleted... (Attempt $$((++retry)))"; \
+				sleep 3; \
+			done; \
+			$(KIND) delete cluster --name="$(KIND_CLUSTER_NAME)"; \
+		else \
+			echo "Can't find kind cluster with the name $(KIND_CLUSTER_NAME)"; \
+		fi; \
+	else \
+		echo "Non-kind cluster detected. Cleaning up."; \
+		for NAMESPACE in k0rdent projectsveltos mgmt; do \
+			if $(KUBECTL) get namespace $$NAMESPACE > /dev/null 2>&1; then \
+				for release in $$($(KUBECTL) -n $$NAMESPACE get helmreleases -o name | awk -F'/' '{print $$2}'); do \
+					echo "Uninstalling Helm release $$release in namespace $$NAMESPACE"; \
+					$(HELM) uninstall $$release -n $$NAMESPACE || true; \
+				done; \
+				echo "Deleting finalizers for namespace $$NAMESPACE"; \
+				for kind in $(CRD_DELETION_LIST); do \
+					if $(KUBECTL) get $$kind -n $$NAMESPACE > /dev/null 2>&1; then \
+						echo "Deleting $$kind"; \
+						$(KUBECTL) get $$kind -n $$NAMESPACE -o name | \
+						while read -r resource; do \
+							$(KUBECTL) patch $$resource -n $$NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge; \
+						done; \
+					fi; \
+				done; \
+				if $(KUBECTL) get management.k0rdent kcm > /dev/null 2>&1; then \
+					echo "Deleting management object"; \
+					$(KUBECTL) patch management.k0rdent kcm --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'; \
+					$(KUBECTL) delete management.k0rdent kcm; \
+				fi; \
+				echo "Deleting namespace $$NAMESPACE"; \
+				$(KUBECTL) delete namespace $$NAMESPACE; \
+			else \
+				echo "Namespace $$NAMESPACE does not exist. Skipping."; \
+			fi; \
+		done; \
+	$(MAKE) cleanup-sveltos-k0smotron; \
+	fi;
+
+.PHONY: cleanup-sveltos-k0smotron
+cleanup-sveltos-k0smotron: ## This loop will find all CRDs whose names match "sveltos" or "k0smotron"
+	@$(KUBECTL) get crd -o jsonpath='{range .items[*]}{@.metadata.name}{"\n"}{end}' | grep -E '(projectsveltos.io|k0smotron.io)' | \
+	while read -r crd; do \
+		echo "Processing CRD: $$crd"; \
+		for resource in $$($(KUBECTL) get "$$crd" -A -o name 2>/dev/null || true); do \
+			echo "  Deleting CR: $$resource"; \
+			$(KUBECTL) patch "$$resource" --type=merge -p '{"metadata":{"finalizers":[]}}' || true; \
+			$(KUBECTL) delete "$$resource" --ignore-not-found || true; \
+		done; \
+		echo "  Deleting CRD: $$crd"; \
+		$(KUBECTL) delete crd "$$crd" --ignore-not-found || true; \
+	done
 
 .PHONY: clean-configs
 clean-configs:

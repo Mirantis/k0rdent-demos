@@ -1,0 +1,24 @@
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterTemplate
+metadata:
+  name: demo-openstack-standalone-cp-0.0.1
+  namespace: ${NAMESPACE}
+spec:
+  helm:
+    chartSpec:
+      chart: demo-openstack-standalone-cp
+      version: 0.0.1
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: k0rdent-demos
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterTemplateChain
+metadata:
+  name: demo-openstack-standalone-cp-0.0.1
+  namespace: ${NAMESPACE}
+spec:
+  supportedTemplates:
+    - name: demo-openstack-standalone-cp-0.0.1
