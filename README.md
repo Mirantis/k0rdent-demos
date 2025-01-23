@@ -16,6 +16,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
    1. [Infrastructure setup](#infra-setup)
       1. [AWS setup](#aws-setup)
       1. [Azure setup](#azure-setup)
+      1. [OpenStack setup](#openstack-setup)
 1. [Demo 1: Standalone Cluster Deployment](#demo-1-standalone-cluster-deployment)
 1. [Demo 2: Single Standalone Cluster Upgrade](#demo-2-single-standalone-cluster-upgrade)
 1. [Demo 3: Install ServiceTemplate into single cluster](#demo-3-install-servicetemplate-into-single-cluster)
@@ -123,6 +124,7 @@ As next you need to decide into which infrastructure you would like to install t
 
 - AWS
 - Azure
+- OpenStack
 
 #### AWS Setup
 
@@ -188,6 +190,33 @@ This assumes that you already have configured the required [Azure providers](htt
     ```
     NAME                          READY   DESCRIPTION
     azure-cluster-identity-cred   true    Azure credentials
+    ```
+
+#### OpenStack Setup
+
+> Expected completion time ~2 min
+
+This assumes that you already have configured an Application Credential in OpenStack, the flavor "m1.medium" exists, and an image called "ubuntu-22.04" is present.
+
+1. Export Application Credential as environment variables:
+    ```shell
+    export OS_APPLICATION_CREDENTIAL_ID="OpenStack application credential key"
+    export OS_APPLICATION_CREDENTIAL_SECRET="OpenStack application credential secret"
+    export OS_AUTH_URL="OpenStack auth url"
+    ````
+2. Install Credentials into k0rdent:
+    ```shell
+    make apply-openstack-creds
+    ```
+
+3. Check that credentials are ready to use
+    ```shell
+    make get-creds-openstack
+    ```
+    The output should be similar to:
+    ```
+    NAME                              READY   DESCRIPTION
+    openstack-cluster-identity-cred   true    OpenStack credentials
     ```
 
 ### Demo Cluster Setup
@@ -330,6 +359,8 @@ In the real world this would most probably be done by a Platform Team Lead that 
 ## Demo 2: Single Standalone Cluster Upgrade
 
 > Expected completion time ~10 min
+
+> Disclaimer: The current upgrade process updates the control plane nodes automatically during the upgrade. However, worker nodes are not updated in place. Instead, new worker nodes need to be created, and the old ones deleted to complete the upgrade. This behavior is expected and follows standard Kubernetes cluster upgrade practices. There is ongoing work to explore ways to improve this process, but any changes would need to balance convenience with maintaining compatibility with CAPI practices.
 
 This demo shows how to upgrade an existing cluster through the cluster template system. This expects [Demo 1](#demo-1-standalone-cluster-deployment) to be completed or the `aws-test1` cluster already created during the [Demo Setup](#demo-cluster-setup).
 
@@ -541,7 +572,7 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 4. You can also check the deployment status for all clusters in the `MultiClusterService` object:
     ```shell
-    make get-yaml-milticlasterservice-global-kyverno
+    make get-yaml-multiclusterservice-global-kyverno
     ```
 
     In the output you can find information about clusters where the service is deployed (username suffix will be present only if you specified the `USERNAME` variable at the [`General Setup`](#general-setup) step):
@@ -651,6 +682,8 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 ## Demo 6: Use approved ClusterTemplate in separate Namespace
 
 > Expected completion time ~10-15 min
+
+> Note: Currently not working correctly for OpenStack due to CAPO internal implementation out side of k0rdent.
 
 1. Create Cluster in blue namespace (this will be ran as platform engineer)
     ```shell
