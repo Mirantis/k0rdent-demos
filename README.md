@@ -10,33 +10,40 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 
 ## Table of Contents
 
-1. [Setup](#setup)
-   1. [Prerequisites](#prerequisites)
-   1. [General setup](#general-setup)
-   1. [Infrastructure setup](#infra-setup)
-      1. [AWS setup](#aws-setup)
-      1. [Azure setup](#azure-setup)
-      1. [OpenStack setup](#openstack-setup)
-1. [Demo 1: Standalone Cluster Deployment](#demo-1-standalone-cluster-deployment)
-1. [Demo 2: Single Standalone Cluster Upgrade](#demo-2-single-standalone-cluster-upgrade)
-1. [Demo 3: Install ServiceTemplate into single cluster](#demo-3-install-servicetemplate-into-single-cluster)
-1. [Demo 4: Install ServiceTemplate into multiple clusters](#demo-4-install-servicetemplate-into-multiple-clusters)
-1. [Demo 5: Approve ClusterTemplate & InfraCredentials for separate Namespace](#demo-5-approve-clustertemplate--infracredentials-for-separate-namespace)
-1. [Demo 6: Use approved ClusterTemplate in separate Namespace](#demo-6-use-approved-clustertemplate-in-separate-namespace)
-1. [Demo 7: Test new ClusterTemplate as k0rdent Admin, then approve them in separate Namespace](#demo-7-test-new-clustertemplate-as-k0rdent-admin-then-approve-them-in-separate-namespace)
-1. [Demo 8: Use newly approved ClusterTemplate in separate Namespace](#demo-8-use-newly-clustertemplate-namespace-in-separate-namespace)
-1. [Demo 9: Approve ServiceTemplate in separate Namespace](#demo-9-approve-servicetemplate-in-separate-namespace)
-1. [Demo 10: Use ServiceTemplate in separate Namespace](#demo-10-use-servicetemplate-in-separate-namespace)
-1. [Cleaning up](#cleaning-up)
+- [k0rdent Demo Repo](#k0rdent-demo-repo)
+  - [What this is for](#what-this-is-for)
+  - [Table of Contents](#table-of-contents)
+  - [Setup](#setup)
+    - [Prerequisites](#prerequisites)
+    - [General Setup](#general-setup)
+    - [Infra Setup](#infra-setup)
+      - [AWS Setup](#aws-setup)
+      - [Azure Setup](#azure-setup)
+      - [OpenStack Setup](#openstack-setup)
+    - [Demo Cluster Setup](#demo-cluster-setup)
+    - [Blue Namespace \& Platform Engineer Credentials](#blue-namespace--platform-engineer-credentials)
+  - [Demo 1: Standalone Cluster Deployment](#demo-1-standalone-cluster-deployment)
+  - [Demo 2: Single Standalone Cluster Upgrade](#demo-2-single-standalone-cluster-upgrade)
+  - [Demo 3: Install ServiceTemplate into single Cluster](#demo-3-install-servicetemplate-into-single-cluster)
+  - [Demo 4: Install ServiceTemplate into multiple clusters](#demo-4-install-servicetemplate-into-multiple-clusters)
+  - [Demo 5: Approve ClusterTemplate \& InfraCredentials for separate Namespace](#demo-5-approve-clustertemplate--infracredentials-for-separate-namespace)
+  - [Demo 6: Use approved ClusterTemplate in separate Namespace](#demo-6-use-approved-clustertemplate-in-separate-namespace)
+  - [Demo 7: Test new ClusterTemplate as k0rdent Admin, then approve them in separate Namespace](#demo-7-test-new-clustertemplate-as-k0rdent-admin-then-approve-them-in-separate-namespace)
+  - [Demo 8: Use newly approved ClusterTemplate in separate Namespace](#demo-8-use-newly-approved-clustertemplate-in-separate-namespace)
+  - [Demo 9: Approve ServiceTemplate in separate Namespace](#demo-9-approve-servicetemplate-in-separate-namespace)
+  - [Demo 10: Use ServiceTemplate in separate Namespace](#demo-10-use-servicetemplate-in-separate-namespace)
+  - [Cleaning up](#cleaning-up)
 
 ## Setup
 
 ### Prerequisites
 
 Tools needed to run this demo are
+- Bash
 - Docker
 - Git
-- make
+- Make
+- Curl (optional)
 
 If you're unsure about whether your system is supported and whether all tools are installed correctly, we provide a script that helps you answer this questions.
 Follow these steps to download and run the script to check your setup.
