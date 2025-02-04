@@ -147,7 +147,7 @@ To get the full list of commands run `make help`.
 
 ### Infra Setup
 
-As next you need to decide into which infrastructure you would like to install the Demo clusters. This Demo Repo has support for the following Infra Providers (more to follow in the future):
+Next, choose the infrastructure provider where you would like to install the Demo clusters. This Demo Repo has support for the following Infra Providers (more to follow in the future):
 
 - AWS
 - Azure
@@ -204,8 +204,6 @@ This assumes that you already have configured the required [AWS IAM Roles](https
     ```
 
 #### Azure Setup
-
-**Currently demos don't have Azure cluster deployments, so you can skip this section**
 
 > Expected completion time ~2 min
 
