@@ -11,6 +11,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 ## Table of Contents
 
 1. [Setup](#setup)
+   1. [Supported Operating Systems](#supported-operating-systems)
    1. [Prerequisites](#prerequisites)
    1. [General setup](#general-setup)
    1. [Infrastructure setup](#infra-setup)
@@ -30,6 +31,10 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 1. [Cleaning up](#cleaning-up)
 
 ## Setup
+
+### Supported Operating Systems
+
+This demo is intended for UNIX-like systems such as Linux (e.g., Ubuntu, RHEL, etc.) or macOS. While this might work under other environments, they have not been tested or officially supported. For the most reliable experience, we recommend using Linux or macOS.
 
 ### Prerequisites
 
@@ -67,7 +72,9 @@ To get the full list of commands run `make help`.
 > Expected completion time ~10 min
 
 > **Check Docker 'kind' network**  
-> The default Docker network for `kind` sometimes conflicts if it is created with a `172.18.0.0/16` subnet.  
+> The default, the Docker network for `kind` may be created with a `172.18.0.0/16` subnet.
+> In some environments, this can conflict with a cloud provider or internal infrastructure using the `172.18.x.x` range.
+> For instance, if your OpenStack API endpoint uses `172.18.x.x`, this overlapping subnet will cause connectivity issues.
 > To avoid issues, remove or recreate the `kind` network with a different subnet **before** bootstrapping your cluster:
 >
 > ```shell
