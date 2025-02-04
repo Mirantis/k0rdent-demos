@@ -6,7 +6,7 @@ The intention of this k0rdent Demo repo is to have a place for demos and example
 
 It includes scripts and implementation examples for basic and advanced usage for k0rdent.
 
-All demos in here provide their own complete ClusterTemplates and ServiceTemplates and do not use the included k0rdent templates at all. This is done on one side to not be depending on k0rdent included templates and on the other side shows how custom and BYO (bring your own) templates can be used. Learn more about [BYO Templates in the k0rdent documentation](https://k0rdent.github.io/docs/template/byo-templates/).
+All demos in here provide their own complete ClusterTemplates and ServiceTemplates and do not use the included k0rdent templates at all. This is done on one side to not be depending on k0rdent included templates and on the other side shows how custom and BYO (bring your own) templates can be used. Learn more about [BYO Templates in the k0rdent documentation](https://docs.k0rdent.io/v0.1.0/template-byo/).
 
 ## Table of Contents
 
