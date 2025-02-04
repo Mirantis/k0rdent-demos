@@ -34,7 +34,7 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 
 ### Supported Operating Systems
 
-This demo is intended for UNIX-like systems such as Linux (e.g., Ubuntu, RHEL, etc.) or macOS. While this might work under other environments, they have not been tested or officially supported. For the most reliable experience, we recommend using Linux or macOS.
+This demo is intended for UNIX-like systems such as Linux (e.g., Ubuntu, RHEL, etc.) or macOS. While this might work under other environments, it have not been tested or officially supported. For the most reliable experience, we recommend using Linux or macOS.
 
 ### Prerequisites
 
