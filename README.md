@@ -6,7 +6,7 @@ The intention of this k0rdent Demo repo is to have a place for demos and example
 
 It includes scripts and implementation examples for basic and advanced usage for k0rdent.
 
-All demos in here provide their own complete ClusterTemplates and ServiceTemplates and do not use the included k0rdent templates at all. This is done on one side to not be depending on k0rdent included templates and on the other side shows how custom and BYO (bring your own) templates can be used. Learn more about [BYO Templates in the k0rdent documentation](https://k0rdent.github.io/docs/template/byo-templates/).
+All demos in here provide their own complete ClusterTemplates and ServiceTemplates and do not use the included k0rdent templates at all. This is done on one side to not be depending on k0rdent included templates and on the other side shows how custom and BYO (bring your own) templates can be used. Learn more about [BYO Templates in the k0rdent documentation](https://docs.k0rdent.io/latest/template-byo/).
 
 ## Table of Contents
 
@@ -65,6 +65,26 @@ To get the full list of commands run `make help`.
 ### General Setup
 
 > Expected completion time ~10 min
+
+> **Check Docker 'kind' network**  
+> The default Docker network for `kind` sometimes conflicts if it is created with a `172.18.0.0/16` subnet.  
+> To avoid issues, remove or recreate the `kind` network with a different subnet **before** bootstrapping your cluster:
+>
+> ```shell
+> # 1. Check if the "kind" network already exists
+> docker network inspect kind
+>
+> # 2. If it exists, check the subnet
+> docker network inspect kind --format '{{(index .IPAM.Config 0).Subnet}}'
+>
+> # 3. If the output is 172.18.0.0/16 (or any other conflicting subnet), remove the network:
+> docker network rm kind
+>
+> # 4. Create or recreate it with a custom subnet (e.g., 10.24.0.0/16)
+> docker network create kind --subnet=10.24.0.0/16
+> ```
+>
+> Once the `kind` network is ready, continue with the [bootstrap-kind-cluster](#) step.
 
 1. Create a k0rdent Management cluster with kind:
     ```shell
@@ -126,11 +146,26 @@ As next you need to decide into which infrastructure you would like to install t
 - Azure
 - OpenStack
 
+> **Note on Cloud Provider Commands**  
+> Throughout these demos, you might see commands referencing `aws`. For example:
+> ```shell
+> make apply-clustertemplate-demo-aws-standalone-cp-0.0.1
+> ```
+> If you are using **Azure** or **OpenStack** instead, simply replace `aws` with your provider name, for example:
+> ```shell
+> # Azure
+> make apply-clustertemplate-demo-azure-standalone-cp-0.0.1
+>
+> # OpenStack
+> make apply-clustertemplate-demo-openstack-standalone-cp-0.0.1
+> ```
+> The rest of the steps remain the same—just ensure you use the relevant commands for your chosen infrastructure.
+
 #### AWS Setup
 
 > Expected completion time ~2 min
 
-This assumes that you already have configured the required [AWS IAM Roles](https://k0rdent.github.io/docs/quick-start/aws/#configure-aws-iam) and have an [AWS account with the required permissions](https://k0rdent.github.io/docs/quick-start/aws/#step-1-create-aws-iam-user). If not follow the k0rdent documentation steps for them.
+This assumes that you already have configured the required [AWS IAM Roles](https://docs.k0rdent.io/v0.1.0/quickstart-2-aws/#attach-iam-policies-to-the-k0rdent-user) and have an [AWS account with the required permissions](https://docs.k0rdent.io/v0.1.0/quickstart-2-aws/#create-the-k0rdent-aws-user). If not follow the k0rdent documentation steps for them.
 
 1. Export AWS Keys as environment variables:
     ```shell
@@ -167,7 +202,7 @@ This assumes that you already have configured the required [AWS IAM Roles](https
 
 > Expected completion time ~2 min
 
-This assumes that you already have configured the required [Azure providers](https://k0rdent.github.io/docs/quick-start/azure/#register-resource-providers) and created a [Azure Service Principal](https://k0rdent.github.io/docs/quick-start/azure/#step-2-create-a-service-principal-sp).
+This assumes that you already have configured the required [Azure providers](https://docs.k0rdent.io/v0.1.0/quickstart-2-aws/#attach-iam-policies-to-the-k0rdent-user) and created a [Azure Service Principal](https://docs.k0rdent.io/v0.1.0/quickstart-2-aws/#attach-iam-policies-to-the-k0rdent-user). If not follow the k0rdent documentation steps for them.
 
 1. Export Azure Service Principal keys as environment variables:
     ```
@@ -459,7 +494,7 @@ In order to run this demo you need [`Demo 1`](#demo-1-standalone-cluster-deploym
 
 3. Monitor how the ingress-nginx is installed in `test2` cluster:
     ```shell
-    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" PATH=$PATH:./bin kubectl get pods -n ingress-nginx
+    KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" PATH=$PATH:./bin kubectl get pods -n ingress-nginx -w
     ```
 
     The final state should be similar to:
@@ -552,11 +587,11 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 3. Monitor how the kyverno service is being installed in both clusters that we deployed previously:
     ```shell
-    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test1.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno
+    KUBECONFIG="kubeconfigs/k0rdent-aws-test1.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno -w
     ```
 
     ```shell
-    watch KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno
+    KUBECONFIG="kubeconfigs/k0rdent-aws-test2.kubeconfig" PATH=$PATH:./bin kubectl get pods -n kyverno -w
     ```
 
     There might be a couple of seconds delay before that k0rdent and sveltos needs to start the installation of kyverno, give it at least 1 mins.
@@ -683,7 +718,7 @@ Be aware though that the cluster creation takes around 10-15mins, so depending o
 
 > Expected completion time ~10-15 min
 
-> Note: Currently not working correctly for OpenStack due to CAPO internal implementation out side of k0rdent.
+> Note: Currently not working correctly for OpenStack due to CAPO internal implementation outside of k0rdent.
 
 1. Create Cluster in blue namespace (this will be ran as platform engineer)
     ```shell
@@ -919,7 +954,7 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
 
 2. Monitor how the ingress-nginx is installed in `dev1` cluster:
     ```shell
-    watch KUBECONFIG="kubeconfigs/blue-aws-dev1.kubeconfig" PATH=$PATH:./bin kubectl get pods -n ingress-nginx
+    KUBECONFIG="kubeconfigs/blue-aws-dev1.kubeconfig" PATH=$PATH:./bin kubectl get pods -n ingress-nginx -w
     ```
 
     The final state should be similar to:
@@ -956,7 +991,7 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
 
     Get the state of `kyverno` service in `dev1` cluster:
     ```shell
-    watch KUBECONFIG="kubeconfigs/blue-aws-dev1.kubeconfig" kubectl get pods -n kyverno
+    KUBECONFIG="kubeconfigs/blue-aws-dev1.kubeconfig" kubectl get pods -n kyverno -w
     ```
     
     It should show the state similar to:
@@ -970,7 +1005,7 @@ It will upgrade the k8s cluster from `v1.31.2+k0s.0` (which is part of the `demo
 
     You can also find that the new `ClusterDeployment` from the `blue` namespace appears in the `MultiClusterService` object status:
     ```shell
-    make get-yaml-milticlasterservice-global-kyverno
+    make get-yaml-multiclusterservice-global-kyverno
     ```
 
     In the output you can find information about clusters where the service is deployed:
