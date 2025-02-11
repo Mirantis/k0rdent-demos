@@ -412,14 +412,27 @@ apply-cluster-deployment-aws-test1-0.0.2: CLUSTERNAME = test1
 apply-cluster-deployment-aws-test1-0.0.2: template_path = clusterDeployments/aws/0.0.2.yaml
 apply-cluster-deployment-aws-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2
 
+apply-cluster-deployment-aws-test2-0.0.2: CLUSTERNAME = test2
+apply-cluster-deployment-aws-test2-0.0.2: template_path = clusterDeployments/aws/0.0.2.yaml
+apply-cluster-deployment-aws-test2-0.0.2: ## Upgrade cluster deployment test2 to version 0.0.2
+
 apply-cluster-deployment-azure-test1-0.0.2: CLUSTERNAME = test1
 apply-cluster-deployment-azure-test1-0.0.2: template_path = clusterDeployments/azure/0.0.2.yaml
 apply-cluster-deployment-azure-test1-0.0.2: .check-variable-azure-sp-subscription-id
 apply-cluster-deployment-azure-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2
 
+apply-cluster-deployment-azure-test2-0.0.2: CLUSTERNAME = test2
+apply-cluster-deployment-azure-test2-0.0.2: template_path = clusterDeployments/azure/0.0.2.yaml
+apply-cluster-deployment-azure-test2-0.0.2: .check-variable-azure-sp-subscription-id
+apply-cluster-deployment-azure-test2-0.0.2: ## Upgrade cluster deployment test2 to version 0.0.2
+
 apply-cluster-deployment-openstack-test1-0.0.2: CLUSTERNAME = test1
 apply-cluster-deployment-openstack-test1-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
 apply-cluster-deployment-openstack-test1-0.0.2: ## Upgrade cluster deployment test1 to version 0.0.2	
+
+apply-cluster-deployment-openstack-test2-0.0.2: CLUSTERNAME = test2
+apply-cluster-deployment-openstack-test2-0.0.2: template_path = clusterDeployments/openstack/0.0.2.yaml
+apply-cluster-deployment-openstack-test2-0.0.2: ## Upgrade cluster deployment test2 to version 0.0.2
 
 ##@ Demo 3
 
