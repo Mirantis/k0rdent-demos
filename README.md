@@ -95,7 +95,7 @@ To get the full list of commands run `make help`.
 > docker network create kind --subnet=10.24.0.0/16
 > ```
 >
-> Once the `kind` network is ready, continue with the [bootstrap-kind-cluster](#) step.
+> Once the `kind` network is ready, continue with the next step "Create a k0rdent Management cluster with kind".
 
 1. Create a k0rdent Management cluster with kind:
     ```shell
@@ -1094,6 +1094,8 @@ Although this project currently defaults to installing and running on a local Ki
     --set cert-manager.enabled=false` 
     ```
     If your cluster already has Flux CD installed,  **you must uninstall Flux CD or use a different cluster**.
+
+    Once the helm command has completed successfully, continue with the next step "Monitor the installation of k0rdent" in the "General" section.
 
 ### 3. **Clean Up on a Non-Kind Cluster**
 
