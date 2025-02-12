@@ -29,10 +29,10 @@ All demos in here provide their own complete ClusterTemplates and ServiceTemplat
 1. [Demo 9: Approve ServiceTemplate in separate Namespace](#demo-9-approve-servicetemplate-in-separate-namespace)
 1. [Demo 10: Use ServiceTemplate in separate Namespace](#demo-10-use-servicetemplate-in-separate-namespace)
 1. [Cleaning up](#cleaning-up)
-1. [Appendix: Installation and Clean up on Non-Kind Clusters](#Appendix:-installation-and-clean-up-on-non-kind-clusters)
-    1. [Prerequisites and Caveats](#prerequisites-and-caveats)
-    1. [Installing k0rdent](#installing-k0rdent)
-    1. [Clean Up on a Non-Kind Cluster](#clean-up-on-a-non-kind-cluster)
+1. [Appendix: Installation and Clean up on Non-Kind Clusters](#appendix-installation-and-clean-up-on-non-kind-clusters)
+    1. [Prerequisites and Caveats](#1-prerequisites-and-caveats)
+    1. [Installing k0rdent](#2-installing-k0rdent)
+    1. [Clean Up on a Non-Kind Cluster](#3-clean-up-on-a-non-kind-cluster)
 
 ## Setup
 
@@ -1058,10 +1058,13 @@ make cleanup-clusters
 Although this project currently defaults to installing and running on a local Kind cluster, you can deploy k0rdent to other Kubernetes distributions. The following steps outline considerations and manual procedures required for non-Kind environments.
 
 1. **Prerequisites and Caveats**
+
     a). **Flux CD Conflict**
+
     If Flux CD is already installed in your cluster, k0rdent will not install correctly. You must either uninstall Flux CD or install k0rdent in a separate cluster that does not have Flux CD.
         
     b). **Cert-Manager Conflict**
+
     If your cluster already has Cert-Manager installed (for example, from a previous installation or from another operator), you can disable k0rdent’s built-in Cert-Manager by adding the following Helm flag during installation:
    ```
    --set cert-manager.enabled=false
@@ -1070,6 +1073,7 @@ Although this project currently defaults to installing and running on a local Ki
     This will instruct k0rdent not to install its own Cert-Manager components.
 
     c). **Helm Registry Port**
+
     By default, the Makefile sets:
     ```
     HELM_REGISTRY_EXTERNAL_PORT ?= 30500
@@ -1080,6 +1084,7 @@ Although this project currently defaults to installing and running on a local Ki
     ```
 
 2. **Installing k0rdent**
+
     Manually install k0rdent using the following command:
     ```
     helm  install  kcm  oci://ghcr.io/k0rdent/kcm/charts/kcm  --version  0.1.0  -n  k0rdent  --create-namespace
@@ -1091,6 +1096,7 @@ Although this project currently defaults to installing and running on a local Ki
     If your cluster already has Flux CD installed,  **you must uninstall Flux CD or use a different cluster**.
 
 3. **Clean Up on a Non-Kind Cluster**
+
     If you ever need to remove k0rdent resources and the associated Helm releases from a cluster that is **not** using Kind, you can follow this outline:
 
     a). **Tear down any managed clusters**
