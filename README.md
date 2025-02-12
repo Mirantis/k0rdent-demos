@@ -1057,7 +1057,7 @@ make cleanup-clusters
 
 Although this project currently defaults to installing and running on a local Kind cluster, you can deploy k0rdent to other Kubernetes distributions. The following steps outline considerations and manual procedures required for non-Kind environments.
 
-1. **Prerequisites and Caveats**
+### 1. **Prerequisites and Caveats**
 
     a). **Flux CD Conflict**
 
@@ -1083,7 +1083,7 @@ Although this project currently defaults to installing and running on a local Ki
     export HELM_REGISTRY_EXTERNAL_PORT=32500
     ```
 
-2. **Installing k0rdent**
+### 2. **Installing k0rdent**
 
     Manually install k0rdent using the following command:
     ```
@@ -1095,7 +1095,7 @@ Although this project currently defaults to installing and running on a local Ki
     ```
     If your cluster already has Flux CD installed,  **you must uninstall Flux CD or use a different cluster**.
 
-3. **Clean Up on a Non-Kind Cluster**
+### 3. **Clean Up on a Non-Kind Cluster**
 
     If you ever need to remove k0rdent resources and the associated Helm releases from a cluster that is **not** using Kind, you can follow this outline:
 
