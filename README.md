@@ -1059,11 +1059,11 @@ Although this project currently defaults to installing and running on a local Ki
 
 ### 1. **Prerequisites and Caveats**
 
-    a). **Flux CD Conflict**
+- **Flux CD Conflict**
 
     If Flux CD is already installed in your cluster, k0rdent will not install correctly. You must either uninstall Flux CD or install k0rdent in a separate cluster that does not have Flux CD.
         
-    b). **Cert-Manager Conflict**
+- **Cert-Manager Conflict**
 
     If your cluster already has Cert-Manager installed (for example, from a previous installation or from another operator), you can disable k0rdent’s built-in Cert-Manager by adding the following Helm flag during installation:
    ```
@@ -1072,12 +1072,13 @@ Although this project currently defaults to installing and running on a local Ki
 
     This will instruct k0rdent not to install its own Cert-Manager components.
 
-    c). **Helm Registry Port**
+- **Helm Registry Port**
 
     By default, the Makefile sets:
     ```
     HELM_REGISTRY_EXTERNAL_PORT ?= 30500
     ```
+
     This is the NodePort used to expose the Helm registry inside your cluster. Many managed Kubernetes environments (e.g., Mirantis Kubernetes Engine (MKE)) may not allow using ports below 32500 by default. If you need a higher port range, override this with an environment variable before invoking make:
     ```
     export HELM_REGISTRY_EXTERNAL_PORT=32500
@@ -1085,28 +1086,30 @@ Although this project currently defaults to installing and running on a local Ki
 
 ### 2. **Installing k0rdent**
 
-    Manually install k0rdent using the following command:
-    ```
-    helm  install  kcm  oci://ghcr.io/k0rdent/kcm/charts/kcm  --version  0.1.0  -n  k0rdent  --create-namespace
-    ```
-    If your cluster already has cert-manager installed, you may want to disable k0rdent’s built-in cert-manager by appending:
-    ```
-    --set cert-manager.enabled=false` 
-    ```
-    If your cluster already has Flux CD installed,  **you must uninstall Flux CD or use a different cluster**.
+Manually install k0rdent using the following command:
+```
+helm  install  kcm  oci://ghcr.io/k0rdent/kcm/charts/kcm  --version  0.1.0  -n  k0rdent  --create-namespace
+```
 
-    Once the helm command has completed successfully, continue with the next step "Monitor the installation of k0rdent" in the "General" section.
+If your cluster already has cert-manager installed, you may want to disable k0rdent’s built-in cert-manager by appending:
+```
+--set cert-manager.enabled=false` 
+```
+
+If your cluster already has Flux CD installed,  **you must uninstall Flux CD or use a different cluster**.
+
+Once the helm command has completed successfully, continue with the next step "Monitor the installation of k0rdent" in the "General" section.
 
 ### 3. **Clean Up on a Non-Kind Cluster**
 
-    If you ever need to remove k0rdent resources and the associated Helm releases from a cluster that is **not** using Kind, you can follow this outline:
+If you ever need to remove k0rdent resources and the associated Helm releases from a cluster that is **not** using Kind, you can follow this outline:
 
-    a). **Tear down any managed clusters**
+1. Tear down any managed clusters:
     ```
     make cleanup-clusters
     ```
 
-    b). **Uninstall Helm Releases**
+2. Uninstall Helm Releases:
     ```
     for NAMESPACE in k0rdent projectsveltos mgmt; do  
         if kubectl get namespace $NAMESPACE >/dev/null 2>&1; then  
@@ -1120,7 +1123,8 @@ Although this project currently defaults to installing and running on a local Ki
     ```
     _Tip:_ Some CRDs might contain finalizers that can block namespace deletion.
 
-    c). **Remove Finalizers from CRDs**
+3. Remove Finalizers from CRDs:
+
     The following example removes finalizers from the CRDs that might remain:
     ```
     CRD_DELETION_LIST=(
@@ -1146,22 +1150,23 @@ Although this project currently defaults to installing and running on a local Ki
         fi
     done
     ```
-    d). **Remove Any k0rdent Management Objects**
+
+4. Remove Any k0rdent Management Objects:
+
     If you have a management object named `kcm` (or similar):
     ```
     kubectl patch management.k0rdent kcm --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
     kubectl delete management.k0rdent kcm
     ```
 
-    e). **Delete Remaining Namespaces**
-    Finally, remove the namespaces:
+5. Delete Remaining Namespaces:
     ```
     for NAMESPACE in k0rdent projectsveltos mgmt; do
         kubectl delete namespace "$NAMESPACE" --ignore-not-found
     done
     ```
 
-    f). **Remove Sveltos / k0smotron CRDs**
+6. Remove Sveltos / k0smotron CRDs:
     ```
     kubectl get crd -o jsonpath='{range .items[*]}{@.metadata.name}{"\n"}{end}' grep -E '(projectsveltos.io|k0smotron.io)' | while read -r crd; do
         echo "Deleting CRs for $crd"
@@ -1173,6 +1178,7 @@ Although this project currently defaults to installing and running on a local Ki
         kubectl delete crd "$crd" --ignore-not-found
     done
     ```
+
     After these steps, the cluster should be cleared of k0rdent-related resources.
 ---
 **Note:** These instructions are provided as a best-effort guide.
